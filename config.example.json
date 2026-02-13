@@ -1,0 +1,13 @@
+{
+  "key_name": "organizations/{org_id}/apiKeys/{key_id}",
+  "private_key": "-----BEGIN EC PRIVATE KEY-----\nYOUR_PRIVATE_KEY_HERE\n-----END EC PRIVATE KEY-----",
+  "account_prefix": "Assets:Coinbase",
+  "default_accounts": {
+    "staking_income": "Income:Staking",
+    "fees": "Expenses:Fees:Coinbase",
+    "bank_checking": "Assets:Bank:Checking"
+  },
+  "transaction_mappings": {
+    "learning_reward": "Income:Coinbase:Learn"
+  }
+}

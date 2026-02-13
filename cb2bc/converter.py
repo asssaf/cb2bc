@@ -1,0 +1,93 @@
+# cb2bc/converter.py
+from typing import Dict, Any, Optional, Set
+from decimal import Decimal
+from datetime import datetime
+from cb2bc.mappings import get_default_mappings, get_account_for_transaction
+
+def format_commodity(currency: str) -> str:
+    """Format commodity declaration for beancount"""
+    return f"1970-01-01 commodity {currency}"
+
+def collect_commodities(transactions: list) -> Set[str]:
+    """Collect unique currencies from transactions"""
+    commodities = set()
+    for txn in transactions:
+        if amount := txn.get("amount"):
+            commodities.add(amount.get("currency"))
+        if native := txn.get("native_amount"):
+            commodities.add(native.get("currency"))
+    return commodities
+
+def convert_transaction(txn: Dict[str, Any], config: Dict[str, Any]) -> Optional[str]:
+    """
+    Convert Coinbase transaction to beancount format.
+    Returns None if transaction should be skipped.
+    """
+    # Extract basic fields
+    txn_id = txn.get("id")
+    txn_type = txn.get("type")
+    status = txn.get("status")
+    created_at = txn.get("created_at")
+    description = txn.get("description", txn_type.replace("_", " ").title())
+
+    # Skip if not completed
+    if status != "completed":
+        return None
+
+    # Parse amounts
+    amount = txn.get("amount", {})
+    crypto_amount = amount.get("amount")
+    crypto_currency = amount.get("currency")
+
+    native = txn.get("native_amount", {})
+    fiat_amount = native.get("amount")
+    fiat_currency = native.get("currency")
+
+    if not crypto_amount or not crypto_currency:
+        return None
+
+    # Parse date
+    date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    date_str = date.strftime("%Y-%m-%d")
+
+    # Build metadata
+    metadata_lines = [
+        f'  coinbase_id: "{txn_id}"',
+        f'  coinbase_timestamp: "{created_at}"',
+    ]
+
+    # Get accounts
+    prefix = config.get("account_prefix", "Assets:Coinbase")
+    crypto_account = f"{prefix}:{crypto_currency}"
+
+    mappings = get_default_mappings()
+    category = mappings.get(txn_type, "transfer")
+    other_account = get_account_for_transaction(txn_type, category, config)
+
+    # Format transaction based on type
+    lines = [f'{date_str} * "{description}" ^coinbase-{txn_id}']
+    lines.extend(metadata_lines)
+
+    if txn_type == "buy":
+        # Calculate price
+        if fiat_amount and fiat_currency:
+            crypto_dec = Decimal(crypto_amount)
+            fiat_dec = Decimal(fiat_amount)
+            price = abs(fiat_dec / crypto_dec)
+            lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency} {{{price:.2f} {fiat_currency}}}")
+        else:
+            lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
+
+        if other_account:
+            lines.append(f"  {other_account}")
+
+    elif category == "staking" or category == "income":
+        lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
+        if other_account:
+            lines.append(f"  {other_account}")
+
+    else:
+        # Generic transfer (send/receive)
+        lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
+
+    return "\n".join(lines)

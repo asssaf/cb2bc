@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "id": "acc-btc-123",
+      "name": "BTC Wallet",
+      "currency": {
+        "code": "BTC"
+      },
+      "balance": {
+        "amount": "0.5",
+        "currency": "BTC"
+      }
+    },
+    {
+      "id": "acc-eth-456",
+      "name": "ETH Wallet",
+      "currency": {
+        "code": "ETH"
+      },
+      "balance": {
+        "amount": "2.0",
+        "currency": "ETH"
+      }
+    }
+  ]
+}

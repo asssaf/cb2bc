@@ -1,0 +1,73 @@
+# tests/test_api.py
+import responses
+import json
+import pytest
+from pathlib import Path
+from cb2bc.api import CoinbaseClient, CoinbaseAPIError
+
+# Load test EC private key
+TEST_KEY_PATH = Path(__file__).parent / "fixtures" / "test_ec_key.pem"
+TEST_PRIVATE_KEY = TEST_KEY_PATH.read_text()
+
+def test_client_initialization():
+    """Client initializes with key name and private key"""
+    client = CoinbaseClient(key_name="test_key_name", private_key=TEST_PRIVATE_KEY)
+    assert client.key_name == "test_key_name"
+    assert client.private_key == TEST_PRIVATE_KEY
+    assert client.base_url == "https://api.coinbase.com/v2"
+
+@responses.activate
+def test_get_accounts():
+    """Fetch accounts from API"""
+    # Load fixture
+    fixture_path = Path(__file__).parent / "fixtures" / "accounts_response.json"
+    fixture_data = json.loads(fixture_path.read_text())
+
+    # Mock API response
+    responses.add(
+        responses.GET,
+        "https://api.coinbase.com/v2/accounts",
+        json=fixture_data,
+        status=200
+    )
+
+    client = CoinbaseClient(key_name="test_key_name", private_key=TEST_PRIVATE_KEY)
+    accounts = client.get_accounts()
+
+    assert len(accounts) == 2
+    assert accounts[0]["id"] == "acc-btc-123"
+    assert accounts[1]["currency"]["code"] == "ETH"
+
+@responses.activate
+def test_get_transactions():
+    """Fetch transactions for an account"""
+    fixture_path = Path(__file__).parent / "fixtures" / "transactions_response.json"
+    fixture_data = json.loads(fixture_path.read_text())
+
+    responses.add(
+        responses.GET,
+        "https://api.coinbase.com/v2/accounts/acc-123/transactions",
+        json=fixture_data,
+        status=200
+    )
+
+    client = CoinbaseClient(key_name="test_key_name", private_key=TEST_PRIVATE_KEY)
+    transactions = client.get_transactions("acc-123")
+
+    assert len(transactions) == 1
+    assert transactions[0]["type"] == "buy"
+    assert transactions[0]["amount"]["currency"] == "BTC"
+
+@responses.activate
+def test_unauthorized_error():
+    """401 raises clear error message"""
+    responses.add(
+        responses.GET,
+        "https://api.coinbase.com/v2/accounts",
+        json={"error": "Unauthorized"},
+        status=401
+    )
+
+    client = CoinbaseClient(key_name="bad_key", private_key=TEST_PRIVATE_KEY)
+    with pytest.raises(CoinbaseAPIError, match="Invalid credentials"):
+        client.get_accounts()
