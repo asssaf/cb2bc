@@ -1,39 +1,34 @@
 # cb2bc/mappings.py
-from typing import Dict
 
 DEFAULT_MAPPINGS = {
     # Receives and deposits
     "receive": "transfer",
     "fiat_deposit": "transfer",
-
     # Sends and withdrawals
     "send": "transfer",
     "fiat_withdrawal": "transfer",
-
     # Buys and sells
     "buy": "buy",
     "sell": "sell",
-
     # Trading
     "trade": "trade",
     "advanced_trade_fill": "trade",
-
     # Staking and rewards
     "staking_reward": "staking",
     "inflation_reward": "staking",
     "learning_reward": "income",
-
     # Fees
     "pro_fee": "fee",
     "coinbase_fee": "fee",
 }
 
-def get_default_mappings() -> Dict[str, str]:
+
+def get_default_mappings() -> dict[str, str]:
     """Return default transaction type mappings"""
     return DEFAULT_MAPPINGS.copy()
 
-def get_account_for_transaction(txn_type: str, category: str,
-                                config: dict) -> str:
+
+def get_account_for_transaction(txn_type: str, category: str, config: dict) -> str:
     """
     Get beancount account name for a transaction type.
 
