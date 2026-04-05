@@ -89,5 +89,51 @@ def convert_transaction(txn: Dict[str, Any], config: Dict[str, Any]) -> Optional
     else:
         # Generic transfer (send/receive)
         lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
+        if other_account:
+            lines.append(f"  {other_account}")
+
+    return "\n".join(lines)
+
+
+def collect_accounts(transactions: list, config: Dict[str, Any]) -> Set[str]:
+    """Collect all accounts used in transactions"""
+    accounts = set()
+    prefix = config.get("account_prefix", "Assets:Coinbase")
+    mappings = get_default_mappings()
+
+    for txn in transactions:
+        if amount := txn.get("amount"):
+            currency = amount.get("currency")
+            if currency:
+                accounts.add(f"{prefix}:{currency}")
+
+        txn_type = txn.get("type")
+        category = mappings.get(txn_type, "transfer")
+        other_account = get_account_for_transaction(txn_type, category, config)
+        if other_account:
+            accounts.add(other_account)
+
+    return accounts
+
+
+def generate_declarations(transactions: list, config: Dict[str, Any]) -> str:
+    """Generate commodity and account declarations"""
+    lines = []
+
+    # Commodities
+    commodities = collect_commodities(transactions)
+    for commodity in sorted(commodities):
+        lines.append(format_commodity(commodity))
+
+    if commodities:
+        lines.append("")
+
+    # Accounts
+    accounts = collect_accounts(transactions, config)
+    for account in sorted(accounts):
+        lines.append(f"1970-01-01 open {account}")
+
+    if accounts:
+        lines.append("")
 
     return "\n".join(lines)

@@ -21,3 +21,13 @@ def test_get_account_for_fees():
     config = {"default_accounts": {"fees": "Expenses:Fees:Coinbase"}}
     account = get_account_for_transaction("pro_fee", "fee", config)
     assert account == "Expenses:Fees:Coinbase"
+
+def test_get_account_for_transfers():
+    """Transfer transactions map to Equity:Transfers by default"""
+    config = {}
+    account = get_account_for_transaction("send", "transfer", config)
+    assert account == "Equity:Transfers"
+
+    config = {"default_accounts": {"transfers": "Equity:MyTransfers"}}
+    account = get_account_for_transaction("send", "transfer", config)
+    assert account == "Equity:MyTransfers"

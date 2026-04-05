@@ -54,5 +54,5 @@ def get_account_for_transaction(txn_type: str, category: str,
     elif category in ("buy", "sell"):
         return defaults.get("bank_checking", "Assets:Bank:Checking")
     else:
-        # For transfers, return None (will use crypto asset accounts)
-        return None
+        # For transfers, return a balancing account
+        return defaults.get("transfers", "Equity:Transfers")
