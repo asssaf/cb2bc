@@ -70,3 +70,4 @@ def test_convert_send():
     assert "2024-03-01" in result
     assert "Assets:Coinbase:BTC" in result
     assert "-0.1 BTC" in result
+    assert "Equity:Transfers" in result

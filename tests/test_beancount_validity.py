@@ -1,7 +1,7 @@
 import subprocess
 import tempfile
 import os
-from cb2bc.converter import format_commodity, convert_transaction
+from cb2bc.converter import convert_transaction, generate_declarations
 
 def run_bean_check(content):
     with tempfile.NamedTemporaryFile(mode='w', suffix='.beancount', delete=False) as tmp:
@@ -54,25 +54,15 @@ def test_beancount_validity():
     ]
 
     beancount_content = ""
-    # Add commodity declarations
-    beancount_content += format_commodity("BTC") + "\n"
-    beancount_content += format_commodity("ETH") + "\n"
-    beancount_content += format_commodity("USD") + "\n\n"
 
-    # Add account declarations (optional but good practice for bean-check)
-    beancount_content += "1970-01-01 open Assets:Coinbase:BTC\n"
-    beancount_content += "1970-01-01 open Assets:Coinbase:ETH\n"
-    beancount_content += "1970-01-01 open Assets:Bank:Checking\n"
-    beancount_content += "1970-01-01 open Income:Staking\n"
-    beancount_content += "1970-01-01 open Equity:Transfers\n\n"
+    # Generate declarations using the tool's logic
+    beancount_content += generate_declarations(transactions, config)
 
+    # Convert each transaction
     for txn in transactions:
         txn_content = convert_transaction(txn, config)
         if txn_content:
-            # For "send" type transactions, ensure they balance by adding an balancing account
-            if txn["type"] == "send":
-                txn_content += "\n  Equity:Transfers"
-            beancount_content += txn_content + "\n"
+            beancount_content += txn_content + "\n\n"
 
     returncode, stdout, stderr = run_bean_check(beancount_content)
 

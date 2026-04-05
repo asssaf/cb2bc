@@ -7,7 +7,10 @@ from typing import Optional
 
 from cb2bc.config import load_config
 from cb2bc.api import CoinbaseClient, CoinbaseAPIError
-from cb2bc.converter import convert_transaction, format_commodity, collect_commodities
+from cb2bc.converter import (
+    convert_transaction,
+    generate_declarations
+)
 from cb2bc.mappings import get_default_mappings
 
 @click.command()
@@ -64,18 +67,14 @@ def main(from_date: Optional[str], to_date: Optional[str],
             transactions = client.get_transactions(acc_id, start_date, end_date)
             all_transactions.extend(transactions)
 
-        # Collect commodities
-        commodities = collect_commodities(all_transactions)
-
         # Convert transactions
         beancount_lines = []
 
-        # Add commodity declarations
-        for commodity in sorted(commodities):
-            beancount_lines.append(format_commodity(commodity))
-
-        if commodities:
-            beancount_lines.append("")  # Blank line after commodities
+        # Add declarations (only for new file)
+        if not append:
+            declarations = generate_declarations(all_transactions, config)
+            if declarations:
+                beancount_lines.append(declarations)
 
         # Convert each transaction
         converted_count = 0
