@@ -109,7 +109,8 @@ Supports all Coinbase transaction types:
 
 ## Testing
 
-Install optional deps:
+To run tests and generate coverage reports, you must install the package with development dependencies:
+
 ```bash
 pip install -e ".[dev]"
 ```
