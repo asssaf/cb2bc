@@ -22,7 +22,19 @@ dev = [
     "pytest-cov>=4.0",
     "responses>=0.23",
     "beancount>=3.2.0",
+    "ruff",
 ]
 
 [project.scripts]
 cb2bc = "cb2bc.cli:main"
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["cb2bc"]

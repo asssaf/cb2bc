@@ -1,17 +1,15 @@
 # cb2bc/cli.py
-import click
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
+import click
+
+from cb2bc.api import CoinbaseAPIError, CoinbaseClient
 from cb2bc.config import load_config
-from cb2bc.api import CoinbaseClient, CoinbaseAPIError
-from cb2bc.converter import (
-    convert_transaction,
-    generate_declarations
-)
-from cb2bc.mappings import get_default_mappings
+from cb2bc.converter import convert_transaction, generate_declarations
+
 
 @click.command()
 @click.option("--from", "from_date", type=str, help="Start date (YYYY-MM-DD)")
@@ -19,21 +17,35 @@ from cb2bc.mappings import get_default_mappings
 @click.option("--account", type=str, help="Specific account ID")
 @click.option("--output", type=click.Path(), help="Output file path")
 @click.option("--append", is_flag=True, help="Append to output file")
-@click.option("--config", "config_path", type=click.Path(exists=True),
-              help="Config file path")
+@click.option(
+    "--config", "config_path", type=click.Path(exists=True), help="Config file path"
+)
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-def main(from_date: Optional[str], to_date: Optional[str],
-         account: Optional[str], output: Optional[str],
-         append: bool, config_path: Optional[str], verbose: bool):
+def main(
+    from_date: Optional[str],
+    to_date: Optional[str],
+    account: Optional[str],
+    output: Optional[str],
+    append: bool,
+    config_path: Optional[str],
+    verbose: bool,
+):
     """Fetch Coinbase transactions and convert to beancount format"""
 
     # Load configuration
-    config_file = Path(config_path) if config_path else Path.home() / ".config" / "coinbase-beancount" / "config.json"
+    if config_path:
+        config_file = Path(config_path)
+    else:
+        config_file = Path.home() / ".config" / "coinbase-beancount" / "config.json"
     config = load_config(config_file)
 
     # Check for credentials
     if not config.get("key_name") or not config.get("private_key"):
-        click.echo("Error: Missing credentials. Set COINBASE_KEY_NAME and COINBASE_PRIVATE_KEY or add to config file.", err=True)
+        msg = (
+            "Error: Missing credentials. Set COINBASE_KEY_NAME and "
+            "COINBASE_PRIVATE_KEY or add to config file."
+        )
+        click.echo(msg, err=True)
         sys.exit(1)
 
     # Parse dates
@@ -94,14 +106,18 @@ def main(from_date: Optional[str], to_date: Optional[str],
 
         if output:
             mode = "a" if append else "w"
-            Path(output).write_text(output_text, encoding="utf-8")
+            with open(output, mode, encoding="utf-8") as f:
+                f.write(output_text)
             click.echo(f"Wrote to {output}", err=True)
         else:
             click.echo(output_text)
 
         # Summary
         if verbose:
-            click.echo(f"\nConverted {converted_count} transactions ({skipped_count} skipped)", err=True)
+            click.echo(
+                f"\nConverted {converted_count} transactions ({skipped_count} skipped)",
+                err=True,
+            )
 
     except CoinbaseAPIError as e:
         click.echo(f"API Error: {e}", err=True)
@@ -111,6 +127,7 @@ def main(from_date: Optional[str], to_date: Optional[str],
         if verbose:
             raise
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

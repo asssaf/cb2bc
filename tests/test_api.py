@@ -1,13 +1,16 @@
 # tests/test_api.py
-import responses
 import json
-import pytest
 from pathlib import Path
-from cb2bc.api import CoinbaseClient, CoinbaseAPIError
+
+import pytest
+import responses
+
+from cb2bc.api import CoinbaseAPIError, CoinbaseClient
 
 # Load test EC private key
 TEST_KEY_PATH = Path(__file__).parent / "fixtures" / "test_ec_key.pem"
 TEST_PRIVATE_KEY = TEST_KEY_PATH.read_text()
+
 
 def test_client_initialization():
     """Client initializes with key name and private key"""
@@ -15,6 +18,7 @@ def test_client_initialization():
     assert client.key_name == "test_key_name"
     assert client.private_key == TEST_PRIVATE_KEY
     assert client.base_url == "https://api.coinbase.com/v2"
+
 
 @responses.activate
 def test_get_accounts():
@@ -28,7 +32,7 @@ def test_get_accounts():
         responses.GET,
         "https://api.coinbase.com/v2/accounts",
         json=fixture_data,
-        status=200
+        status=200,
     )
 
     client = CoinbaseClient(key_name="test_key_name", private_key=TEST_PRIVATE_KEY)
@@ -37,6 +41,7 @@ def test_get_accounts():
     assert len(accounts) == 2
     assert accounts[0]["id"] == "acc-btc-123"
     assert accounts[1]["currency"]["code"] == "ETH"
+
 
 @responses.activate
 def test_get_transactions():
@@ -48,7 +53,7 @@ def test_get_transactions():
         responses.GET,
         "https://api.coinbase.com/v2/accounts/acc-123/transactions",
         json=fixture_data,
-        status=200
+        status=200,
     )
 
     client = CoinbaseClient(key_name="test_key_name", private_key=TEST_PRIVATE_KEY)
@@ -58,6 +63,7 @@ def test_get_transactions():
     assert transactions[0]["type"] == "buy"
     assert transactions[0]["amount"]["currency"] == "BTC"
 
+
 @responses.activate
 def test_unauthorized_error():
     """401 raises clear error message"""
@@ -65,7 +71,7 @@ def test_unauthorized_error():
         responses.GET,
         "https://api.coinbase.com/v2/accounts",
         json={"error": "Unauthorized"},
-        status=401
+        status=401,
     )
 
     client = CoinbaseClient(key_name="bad_key", private_key=TEST_PRIVATE_KEY)

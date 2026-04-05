@@ -1,14 +1,17 @@
 # cb2bc/converter.py
-from typing import Dict, Any, Optional, Set
-from decimal import Decimal
 from datetime import datetime
-from cb2bc.mappings import get_default_mappings, get_account_for_transaction
+from decimal import Decimal
+from typing import Any, Optional
+
+from cb2bc.mappings import get_account_for_transaction, get_default_mappings
+
 
 def format_commodity(currency: str) -> str:
     """Format commodity declaration for beancount"""
     return f"1970-01-01 commodity {currency}"
 
-def collect_commodities(transactions: list) -> Set[str]:
+
+def collect_commodities(transactions: list) -> set[str]:
     """Collect unique currencies from transactions"""
     commodities = set()
     for txn in transactions:
@@ -18,7 +21,8 @@ def collect_commodities(transactions: list) -> Set[str]:
             commodities.add(native.get("currency"))
     return commodities
 
-def convert_transaction(txn: Dict[str, Any], config: Dict[str, Any]) -> Optional[str]:
+
+def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional[str]:
     """
     Convert Coinbase transaction to beancount format.
     Returns None if transaction should be skipped.
@@ -74,7 +78,10 @@ def convert_transaction(txn: Dict[str, Any], config: Dict[str, Any]) -> Optional
             crypto_dec = Decimal(crypto_amount)
             fiat_dec = Decimal(fiat_amount)
             price = abs(fiat_dec / crypto_dec)
-            lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency} {{{price:.2f} {fiat_currency}}}")
+            lines.append(
+                f"  {crypto_account}  {crypto_amount} "
+                f"{crypto_currency} {{{price:.2f} {fiat_currency}}}"
+            )
         else:
             lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
 
@@ -95,7 +102,7 @@ def convert_transaction(txn: Dict[str, Any], config: Dict[str, Any]) -> Optional
     return "\n".join(lines)
 
 
-def collect_accounts(transactions: list, config: Dict[str, Any]) -> Set[str]:
+def collect_accounts(transactions: list, config: dict[str, Any]) -> set[str]:
     """Collect all accounts used in transactions"""
     accounts = set()
     prefix = config.get("account_prefix", "Assets:Coinbase")
@@ -116,7 +123,7 @@ def collect_accounts(transactions: list, config: Dict[str, Any]) -> Set[str]:
     return accounts
 
 
-def generate_declarations(transactions: list, config: Dict[str, Any]) -> str:
+def generate_declarations(transactions: list, config: dict[str, Any]) -> str:
     """Generate commodity and account declarations"""
     lines = []
 

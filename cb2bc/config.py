@@ -1,8 +1,8 @@
 # cb2bc/config.py
-from pathlib import Path
-from typing import Dict, Any, Optional
 import json
 import os
+from pathlib import Path
+from typing import Any, Optional
 
 DEFAULT_CONFIG = {
     "account_prefix": "Assets:Coinbase",
@@ -16,7 +16,8 @@ DEFAULT_CONFIG = {
     "transaction_mappings": {},
 }
 
-def load_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
+
+def load_config(config_path: Optional[Path] = None) -> dict[str, Any]:
     """Load configuration from file, env vars, with defaults"""
     config = DEFAULT_CONFIG.copy()
 

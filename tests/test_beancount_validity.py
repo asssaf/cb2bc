@@ -1,19 +1,26 @@
+import os
 import subprocess
 import tempfile
-import os
+
 from cb2bc.converter import convert_transaction, generate_declarations
 
+
 def run_bean_check(content):
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.beancount', delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".beancount", delete=False
+    ) as tmp:
         tmp.write(content)
         tmp_path = tmp.name
 
     try:
-        result = subprocess.run(['bean-check', tmp_path], capture_output=True, text=True)
+        result = subprocess.run(
+            ["bean-check", tmp_path], capture_output=True, text=True
+        )
         return result.returncode, result.stdout, result.stderr
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
 
 def test_beancount_validity():
     config = {
@@ -21,8 +28,8 @@ def test_beancount_validity():
         "default_accounts": {
             "staking_income": "Income:Staking",
             "fees": "Expenses:Fees:Coinbase",
-            "bank_checking": "Assets:Bank:Checking"
-        }
+            "bank_checking": "Assets:Bank:Checking",
+        },
     }
 
     transactions = [
@@ -33,7 +40,7 @@ def test_beancount_validity():
             "amount": {"amount": "0.001", "currency": "BTC"},
             "native_amount": {"amount": "50.00", "currency": "USD"},
             "created_at": "2024-01-15T10:30:00Z",
-            "description": "Bought BTC"
+            "description": "Bought BTC",
         },
         {
             "id": "txn-2",
@@ -41,7 +48,7 @@ def test_beancount_validity():
             "status": "completed",
             "amount": {"amount": "0.05", "currency": "ETH"},
             "created_at": "2024-02-01T00:00:00Z",
-            "description": "ETH2 staking reward"
+            "description": "ETH2 staking reward",
         },
         {
             "id": "txn-3",
@@ -49,8 +56,8 @@ def test_beancount_validity():
             "status": "completed",
             "amount": {"amount": "-0.1", "currency": "BTC"},
             "created_at": "2024-03-01T12:00:00Z",
-            "description": "Sent to external wallet"
-        }
+            "description": "Sent to external wallet",
+        },
     ]
 
     beancount_content = ""
@@ -66,4 +73,9 @@ def test_beancount_validity():
 
     returncode, stdout, stderr = run_bean_check(beancount_content)
 
-    assert returncode == 0, f"bean-check failed with return code {returncode}\nSTDOUT: {stdout}\nSTDERR: {stderr}\n\nGenerated Content:\n{beancount_content}"
+    msg = (
+        f"bean-check failed with return code {returncode}\n"
+        f"STDOUT: {stdout}\nSTDERR: {stderr}\n\n"
+        f"Generated Content:\n{beancount_content}"
+    )
+    assert returncode == 0, msg
