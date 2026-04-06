@@ -105,7 +105,9 @@ def test_get_transactions_pagination():
         responses.GET,
         "https://api.coinbase.com/v2/accounts/acc-123/transactions",
         json={
-            "pagination": {"next_uri": "/v2/accounts/acc-123/transactions?starting_after=txn-2"},
+            "pagination": {
+                "next_uri": "/v2/accounts/acc-123/transactions?starting_after=txn-2"
+            },
             "data": [{"id": "txn-1", "type": "buy"}, {"id": "txn-2", "type": "sell"}],
         },
         status=200,
