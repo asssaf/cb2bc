@@ -50,21 +50,28 @@ class CoinbaseClient:
         )
 
         # Build URI: METHOD hostname/v2/path (must match actual request path)
-        # We use a PreparedRequest to normalize the URL and query parameters
-        # for the JWT URI field, as required by Coinbase.
-        req = requests.Request(method, f"{self.base_url}{path}", params=params)
-        prepared = req.prepare()
+        if "?" in path:
+            # If path already has query parameters (from next_uri), use it directly
+            full_path = path
+        else:
+            # We use a PreparedRequest to normalize the URL and query parameters
+            # for the JWT URI field, as required by Coinbase.
+            req = requests.Request(method, f"{self.base_url}{path}", params=params)
+            prepared = req.prepare()
 
-        # Extract path and query from the prepared URL
-        # e.g., https://api.coinbase.com/v2/accounts?limit=25 -> /v2/accounts?limit=25
-        from urllib.parse import urlparse
+            # Extract path and query from the prepared URL
+            # e.g., https://api.coinbase.com/v2/accounts?limit=25 -> /v2/accounts?limit=25
+            from urllib.parse import urlparse
 
-        parsed = urlparse(prepared.url)
-        full_path = parsed.path
-        if parsed.query:
-            full_path += f"?{parsed.query}"
+            parsed = urlparse(prepared.url)
+            full_path = parsed.path
+            if parsed.query:
+                full_path += f"?{parsed.query}"
 
         uri = f"{method} api.coinbase.com{full_path}"
+
+        if self.debug:
+            print(f"JWT URI claim: {uri}", file=sys.stderr)
 
         now = int(time.time())
         payload = {
