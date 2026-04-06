@@ -20,7 +20,9 @@ from cb2bc.converter import convert_transaction, generate_declarations
 @click.option(
     "--config", "config_path", type=click.Path(exists=True), help="Config file path"
 )
-@click.option("--verbose", "-v", count=True, help="Verbose output (use -vv for even more)")
+@click.option(
+    "--verbose", "-v", count=True, help="Verbose output (use -vv for even more)"
+)
 def main(
     from_date: Optional[str],
     to_date: Optional[str],
