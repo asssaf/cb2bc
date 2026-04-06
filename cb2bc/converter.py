@@ -82,11 +82,36 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
                 f"  {crypto_account}  {crypto_amount} "
                 f"{crypto_currency} {{{price:.2f} {fiat_currency}}}"
             )
+            if other_account:
+                # Deduct fiat amount from checking
+                lines.append(f"  {other_account}  -{fiat_amount} {fiat_currency}")
         else:
             lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
+            if other_account:
+                lines.append(f"  {other_account}")
 
-        if other_account:
-            lines.append(f"  {other_account}")
+    elif txn_type == "sell":
+        # Calculate price
+        if fiat_amount and fiat_currency:
+            crypto_dec = Decimal(crypto_amount)
+            fiat_dec = Decimal(fiat_amount)
+            # Crypto amount is negative for sells
+            price = abs(fiat_dec / crypto_dec)
+            # For sells, Beancount needs the price annotation '@' or cost reduction '{}'
+            # To handle cost reduction correctly without 'no position matches',
+            # using 'at price' syntax is often simpler for generated output
+            # unless we track inventory.
+            lines.append(
+                f"  {crypto_account}  {crypto_amount} "
+                f"{crypto_currency} @ {price:.2f} {fiat_currency}"
+            )
+            if other_account:
+                # Add fiat amount to checking
+                lines.append(f"  {other_account}  {abs(fiat_dec)} {fiat_currency}")
+        else:
+            lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
+            if other_account:
+                lines.append(f"  {other_account}")
 
     elif category == "staking" or category == "income":
         lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")

@@ -5,6 +5,7 @@ import sys
 import time
 from datetime import datetime
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import jwt
 import requests
@@ -88,8 +89,6 @@ class CoinbaseClient:
 
         # Extract only the path from the prepared URL for the JWT URI claim.
         # Coinbase CDP API expects the URI claim without query parameters.
-        from urllib.parse import urlparse
-
         path_only = urlparse(prepared.url).path
 
         # Generate JWT for this specific request

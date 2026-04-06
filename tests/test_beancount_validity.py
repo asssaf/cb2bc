@@ -43,6 +43,15 @@ def test_beancount_validity():
             "description": "Bought BTC",
         },
         {
+            "id": "txn-4",
+            "type": "sell",
+            "status": "completed",
+            "amount": {"amount": "-0.001", "currency": "BTC"},
+            "native_amount": {"amount": "60.00", "currency": "USD"},
+            "created_at": "2024-01-16T10:30:00Z",
+            "description": "Sold BTC",
+        },
+        {
             "id": "txn-2",
             "type": "staking_reward",
             "status": "completed",
