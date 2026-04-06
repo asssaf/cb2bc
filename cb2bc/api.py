@@ -66,6 +66,14 @@ class CoinbaseClient:
             headers={"kid": self.key_name, "nonce": secrets.token_hex()},
         )
 
+    def _get_path_from_uri(self, uri: str) -> str:
+        """Extract path from URI, handling absolute and relative paths"""
+        if uri.startswith(self.base_url):
+            return uri.replace(self.base_url, "")
+        elif uri.startswith("/v2"):
+            return uri[3:]
+        return uri
+
     def _request(
         self, method: str, path: str, params: Optional[dict] = None
     ) -> dict[str, Any]:
@@ -122,9 +130,20 @@ class CoinbaseClient:
         return response.json()
 
     def get_accounts(self) -> list[dict[str, Any]]:
-        """Fetch all accounts"""
-        data = self._request("GET", "/accounts")
-        return data.get("data", [])
+        """Fetch all accounts with pagination"""
+        accounts = []
+        path = "/accounts"
+
+        while path:
+            data = self._request("GET", path)
+            accounts.extend(data.get("data", []))
+
+            # Check for next page
+            pagination = data.get("pagination", {})
+            next_uri = pagination.get("next_uri")
+            path = self._get_path_from_uri(next_uri) if next_uri else None
+
+        return accounts
 
     def get_transactions(
         self,
@@ -153,7 +172,7 @@ class CoinbaseClient:
                 pagination = data.get("pagination", {})
                 next_uri = pagination.get("next_uri")
                 if next_uri:
-                    path = next_uri.replace(self.base_url, "")
+                    path = self._get_path_from_uri(next_uri)
                     params = {}  # Next URI includes params
                 else:
                     path = None

@@ -21,6 +21,39 @@ def test_client_initialization():
 
 
 @responses.activate
+def test_get_accounts_pagination():
+    """Fetch accounts from API with pagination"""
+    # Mock first page
+    responses.add(
+        responses.GET,
+        "https://api.coinbase.com/v2/accounts",
+        json={
+            "pagination": {"next_uri": "/v2/accounts?starting_after=acc-2"},
+            "data": [{"id": "acc-1"}, {"id": "acc-2"}],
+        },
+        status=200,
+    )
+    # Mock second page
+    responses.add(
+        responses.GET,
+        "https://api.coinbase.com/v2/accounts?starting_after=acc-2",
+        json={
+            "pagination": {"next_uri": None},
+            "data": [{"id": "acc-3"}],
+        },
+        status=200,
+    )
+
+    client = CoinbaseClient(key_name="test_key_name", private_key=TEST_PRIVATE_KEY)
+    accounts = client.get_accounts()
+
+    assert len(accounts) == 3
+    assert accounts[0]["id"] == "acc-1"
+    assert accounts[1]["id"] == "acc-2"
+    assert accounts[2]["id"] == "acc-3"
+
+
+@responses.activate
 def test_get_accounts():
     """Fetch accounts from API"""
     # Load fixture
