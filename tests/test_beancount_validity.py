@@ -43,6 +43,34 @@ def test_beancount_validity():
             "description": "Bought BTC",
         },
         {
+            "id": "txn-4",
+            "type": "sell",
+            "status": "completed",
+            "amount": {"amount": "-0.001", "currency": "BTC"},
+            "native_amount": {"amount": "57.01", "currency": "USD"},
+            "sell": {
+                "subtotal": {"amount": "60.00", "currency": "USD"},
+                "total": {"amount": "57.01", "currency": "USD"},
+                "fee": {"amount": "2.99", "currency": "USD"},
+            },
+            "created_at": "2024-01-16T10:30:00Z",
+            "description": "Sold BTC",
+        },
+        {
+            "id": "txn-5",
+            "type": "buy",
+            "status": "completed",
+            "amount": {"amount": "0.001", "currency": "BTC"},
+            "native_amount": {"amount": "71.99", "currency": "USD"},
+            "buy": {
+                "subtotal": {"amount": "70.00", "currency": "USD"},
+                "total": {"amount": "71.99", "currency": "USD"},
+                "fee": {"amount": "1.99", "currency": "USD"},
+            },
+            "created_at": "2024-01-17T10:30:00Z",
+            "description": "Bought BTC with fee",
+        },
+        {
             "id": "txn-2",
             "type": "staking_reward",
             "status": "completed",
@@ -57,6 +85,15 @@ def test_beancount_validity():
             "amount": {"amount": "-0.1", "currency": "BTC"},
             "created_at": "2024-03-01T12:00:00Z",
             "description": "Sent to external wallet",
+        },
+        {
+            "id": "txn-6",
+            "type": "buy",
+            "status": "completed",
+            "amount": {"amount": "100.00", "currency": "USDC"},
+            "native_amount": {"amount": "100.00", "currency": "USD"},
+            "created_at": "2024-03-02T12:00:00Z",
+            "description": "USD to USDC conversion",
         },
     ]
 

@@ -5,6 +5,7 @@ import sys
 import time
 from datetime import datetime
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import jwt
 import requests
@@ -31,7 +32,7 @@ class CoinbaseClient:
         self.key_name = key_name
         self.private_key = private_key
         self.debug = debug
-        self.base_url = "https://api.coinbase.com/v2"
+        self.base_url = "https://api.coinbase.com"
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -48,13 +49,19 @@ class CoinbaseClient:
         )
 
         # Build URI: METHOD hostname/v2/path (must match actual request path)
-        uri = f"{method} api.coinbase.com/v2{path}"
+        # Note: Coinbase CDP API documentation says the URI claim should include
+        # METHOD hostname/path (query parameters are excluded from this claim)
+        uri = f"{method} api.coinbase.com{path}"
 
+        if self.debug:
+            print(f"JWT URI claim: {uri}", file=sys.stderr)
+
+        now = int(time.time())
         payload = {
             "sub": self.key_name,
             "iss": "cdp",  # Coinbase requires "cdp" as issuer
-            "nbf": int(time.time()),
-            "exp": int(time.time()) + 120,  # 2 minutes
+            "nbf": now - 5,  # 5 seconds in past for clock skew
+            "exp": now + 60,  # 1 minute expiry
             "uri": uri,
         }
 
@@ -66,30 +73,40 @@ class CoinbaseClient:
             headers={"kid": self.key_name, "nonce": secrets.token_hex()},
         )
 
+    def _get_path_from_uri(self, uri: str) -> str:
+        """Extract path from URI, handling absolute and relative paths"""
+        if uri.startswith(self.base_url):
+            return uri.replace(self.base_url, "")
+        return uri
+
     def _request(
         self, method: str, path: str, params: Optional[dict] = None
     ) -> dict[str, Any]:
         """Make API request with JWT authentication"""
+        # Normalize the URL and query parameters using a PreparedRequest
+        req = requests.Request(method, f"{self.base_url}{path}", params=params)
+        prepared = req.prepare()
+
+        # Extract only the path from the prepared URL for the JWT URI claim.
+        # Coinbase CDP API expects the URI claim without query parameters.
+        path_only = urlparse(prepared.url).path
+
         # Generate JWT for this specific request
-        token = self._generate_jwt(method, path)
-        url = f"{self.base_url}{path}"
-        headers = {"Authorization": f"Bearer {token}"}
+        token = self._generate_jwt(method, path_only)
+        prepared.headers["Authorization"] = f"Bearer {token}"
 
         if self.debug:
-            print(f">>> {method} {url}", file=sys.stderr)
-            if params:
-                print(f"Params: {params}", file=sys.stderr)
-            for k, v in headers.items():
+            print(f">>> {method} {prepared.url}", file=sys.stderr)
+            for k, v in prepared.headers.items():
                 v_log = v
                 if k.lower() == "authorization":
                     v_log = "Bearer [REDACTED]"
                 print(f"Header: {k}: {v_log}", file=sys.stderr)
 
-        response = self.session.request(
-            method, url, params=params, headers=headers, timeout=30
-        )
+        response = self.session.send(prepared, timeout=30)
 
         if self.debug:
+            print(f"URL: {response.url}", file=sys.stderr)
             print(f"<<< Status: {response.status_code}", file=sys.stderr)
             try:
                 print(
@@ -122,9 +139,20 @@ class CoinbaseClient:
         return response.json()
 
     def get_accounts(self) -> list[dict[str, Any]]:
-        """Fetch all accounts"""
-        data = self._request("GET", "/accounts")
-        return data.get("data", [])
+        """Fetch all accounts with pagination"""
+        accounts = []
+        path = "/v2/accounts"
+
+        while path:
+            data = self._request("GET", path)
+            accounts.extend(data.get("data", []))
+
+            # Check for next page
+            pagination = data.get("pagination", {})
+            next_uri = pagination.get("next_uri")
+            path = self._get_path_from_uri(next_uri) if next_uri else None
+
+        return accounts
 
     def get_transactions(
         self,
@@ -134,7 +162,7 @@ class CoinbaseClient:
     ) -> list[dict[str, Any]]:
         """Fetch transactions for an account with pagination"""
         transactions = []
-        path = f"/accounts/{account_id}/transactions"
+        path = f"/v2/accounts/{account_id}/transactions"
 
         # Build params
         params = {}
@@ -153,7 +181,7 @@ class CoinbaseClient:
                 pagination = data.get("pagination", {})
                 next_uri = pagination.get("next_uri")
                 if next_uri:
-                    path = next_uri.replace(self.base_url, "")
+                    path = self._get_path_from_uri(next_uri)
                     params = {}  # Next URI includes params
                 else:
                     path = None
