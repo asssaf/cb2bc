@@ -29,16 +29,14 @@ def _get_fee(txn: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
         return fee.get("amount"), fee.get("currency")
 
     # Try 'network' field (often for sends/buys)
-    if network := txn.get("network"):
-        if fee := network.get("transaction_fee"):
-            return fee.get("amount"), fee.get("currency")
+    if (network := txn.get("network")) and (fee := network.get("transaction_fee")):
+        return fee.get("amount"), fee.get("currency")
 
     # Try 'buy' or 'sell' associated resources if they exist
     # (Sometimes fees are in the sub-resource)
     for sub in ("buy", "sell"):
-        if resource := txn.get(sub):
-            if fee := resource.get("fee"):
-                return fee.get("amount"), fee.get("currency")
+        if (resource := txn.get(sub)) and (fee := resource.get("fee")):
+            return fee.get("amount"), fee.get("currency")
 
     return None, None
 
