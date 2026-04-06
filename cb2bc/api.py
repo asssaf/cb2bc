@@ -39,7 +39,9 @@ class CoinbaseClient:
             }
         )
 
-    def _generate_jwt(self, method: str, path: str, params: Optional[dict] = None) -> str:
+    def _generate_jwt(
+        self, method: str, path: str, params: Optional[dict] = None
+    ) -> str:
         """Generate JWT token for API request using Coinbase's official method"""
         # Load the EC private key from PEM format
         private_key_bytes = self.private_key.encode("utf-8")
