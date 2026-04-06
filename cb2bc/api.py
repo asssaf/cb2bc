@@ -1,5 +1,7 @@
 # cb2bc/api.py
+import json
 import secrets
+import sys
 import time
 from datetime import datetime
 from typing import Any, Optional
@@ -25,9 +27,10 @@ class CoinbaseAPIError(Exception):
 class CoinbaseClient:
     """Client for Coinbase App API with JWT authentication"""
 
-    def __init__(self, key_name: str, private_key: str):
+    def __init__(self, key_name: str, private_key: str, debug: bool = False):
         self.key_name = key_name
         self.private_key = private_key
+        self.debug = debug
         self.base_url = "https://api.coinbase.com/v2"
         self.session = requests.Session()
         self.session.headers.update(
@@ -72,9 +75,29 @@ class CoinbaseClient:
         url = f"{self.base_url}{path}"
         headers = {"Authorization": f"Bearer {token}"}
 
+        if self.debug:
+            print(f">>> {method} {url}", file=sys.stderr)
+            if params:
+                print(f"Params: {params}", file=sys.stderr)
+            for k, v in headers.items():
+                v_log = v
+                if k.lower() == "authorization":
+                    v_log = "Bearer [REDACTED]"
+                print(f"Header: {k}: {v_log}", file=sys.stderr)
+
         response = self.session.request(
             method, url, params=params, headers=headers, timeout=30
         )
+
+        if self.debug:
+            print(f"<<< Status: {response.status_code}", file=sys.stderr)
+            try:
+                print(
+                    f"Response: {json.dumps(response.json(), indent=2)}",
+                    file=sys.stderr,
+                )
+            except Exception:
+                print(f"Response: {response.text}", file=sys.stderr)
 
         if response.status_code == 401:
             msg = (

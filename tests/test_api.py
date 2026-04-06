@@ -77,3 +77,27 @@ def test_unauthorized_error():
     client = CoinbaseClient(key_name="bad_key", private_key=TEST_PRIVATE_KEY)
     with pytest.raises(CoinbaseAPIError, match="Invalid credentials"):
         client.get_accounts()
+
+
+@responses.activate
+def test_debug_logging(capsys):
+    """Debug mode logs requests and responses to stderr"""
+    responses.add(
+        responses.GET,
+        "https://api.coinbase.com/v2/accounts",
+        json={"data": []},
+        status=200,
+    )
+
+    client = CoinbaseClient(
+        key_name="test_key_name", private_key=TEST_PRIVATE_KEY, debug=True
+    )
+    client.get_accounts()
+
+    captured = capsys.readouterr()
+    # Check for request log
+    assert ">>> GET https://api.coinbase.com/v2/accounts" in captured.err
+    assert "Header: Authorization: Bearer [REDACTED]" in captured.err
+    # Check for response log
+    assert "<<< Status: 200" in captured.err
+    assert '"data": []' in captured.err

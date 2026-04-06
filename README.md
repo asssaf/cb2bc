@@ -73,7 +73,11 @@ cb2bc --account acc-btc-123
 Verbose output:
 
 ```bash
+# Basic progress information
 cb2bc --verbose
+
+# Extra verbose mode (logs all API requests and responses)
+cb2bc -vv
 ```
 
 ## Output Format
