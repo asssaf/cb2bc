@@ -80,7 +80,6 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
 
     # For buy/sell, prioritize the sub-resource for amounts if available
     resource = txn.get(txn_type) if txn_type in ("buy", "sell") else None
-    sub_res_subtotal = {}
     if resource:
         # subtotal = gross (before fee, used for unit price)
         # total = net (after fee, used for cash flow)
@@ -131,7 +130,7 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
     lines = [f'{date_str} * "{description}" ^coinbase-{txn_id}']
     lines.extend(metadata_lines)
 
-    if txn_type == "buy":
+    if txn_type in ("buy", "sell"):
         # Calculate price
         if fiat_amount and fiat_currency:
             crypto_dec = Decimal(crypto_amount)
@@ -139,66 +138,26 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
             gross_fiat = Decimal(fiat_amount)
             price = abs(gross_fiat / crypto_dec)
 
-            # Using '@' for buy too can avoid cost matching issues in generated output
-            # though '{price}' is more standard for acquisitions.
+            # Record crypto leg
             lines.append(
                 f"  {crypto_account}  {crypto_amount} "
                 f"{crypto_currency} @ {price:.2f} {fiat_currency}"
             )
+
+            # Record fee leg
             if fee_amount and fee_currency:
                 lines.append(f"  {fee_account}  {fee_amount} {fee_currency}")
+
+            # Record balancing leg
             if other_account:
-                # Deduct total fiat amount (net received by Coinbase) from checking
-                lines.append(f"  {other_account}  -{net_fiat_amount} {fiat_currency}")
-        else:
-            lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
-            if other_account:
-                lines.append(f"  {other_account}")
+                # To ensure the transaction balances, the sign of the balancing
+                # amount must be the negative of the main transaction's sign.
+                # If we're gaining crypto (positive), bank is negative.
+                # If we're losing crypto (negative), bank is positive.
+                net_fiat_dec = abs(Decimal(net_fiat_amount))
+                balancing_amount = -net_fiat_dec if crypto_dec >= 0 else net_fiat_dec
 
-    elif txn_type == "sell":
-        # Calculate price
-        if fiat_amount and fiat_currency:
-            crypto_dec = Decimal(crypto_amount)
-            # gross_fiat is the value before fee
-            gross_fiat = Decimal(fiat_amount)
-            price = abs(gross_fiat / crypto_dec)
-
-            # For sells, Beancount needs the price annotation '@' or cost reduction '{}'
-            # Note: The sum of postings must be zero.
-            # Crypto Value (Gross) + Fee (Expense) + Fiat Received (Income) = 0
-            # Example: Sold 1 BTC for 60k USD, 3 USD fee.
-            # Assets:Coinbase:BTC  -1 BTC @ 60000 USD  -> +60000 USD
-            # Expenses:Fees          3 USD             -> +3 USD
-            # Assets:Bank:Checking  59997 USD          -> -59997 USD
-            # Wait, Beancount signs:
-            # Assets:Coinbase:BTC   -1 BTC @ 60000 USD (+/- based on balance)
-            # Actually, standard sell is:
-            # Assets:Coinbase:BTC   -1 BTC @ 60000 USD
-            # Expenses:Fees          3 USD
-            # Assets:Bank:Checking  59997 USD
-            # This balances if 60000 - 3 - 59997 = 0? No.
-            # If I sell 1 BTC @ 60k, I get 60k. If I pay 3 fee, I have 59997.
-            # Posting 1: -1 BTC @ 60k = -60000 USD
-            # Posting 2: 3 USD
-            # Posting 3: 59997 USD
-            # Sum: -60000 + 3 + 59997 = 0. Correct.
-
-            lines.append(
-                f"  {crypto_account}  {crypto_amount} "
-                f"{crypto_currency} @ {price:.2f} {fiat_currency}"
-            )
-            if fee_amount and fee_currency:
-                lines.append(f"  {fee_account}  {fee_amount} {fee_currency}")
-            if other_account:
-                # Calculate net received if not explicitly provided
-                fee_dec = Decimal(fee_amount) if fee_amount else Decimal("0")
-                if not sub_res_subtotal.get("amount") and fee_dec:
-                    net_received = gross_fiat - fee_dec
-                else:
-                    net_received = abs(Decimal(net_fiat_amount))
-
-                # Add net fiat amount (received in bank) to checking
-                lines.append(f"  {other_account}  {net_received} {fiat_currency}")
+                lines.append(f"  {other_account}  {balancing_amount} {fiat_currency}")
         else:
             lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
             if other_account:
