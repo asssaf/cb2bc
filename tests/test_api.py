@@ -17,7 +17,7 @@ def test_client_initialization():
     client = CoinbaseClient(key_name="test_key_name", private_key=TEST_PRIVATE_KEY)
     assert client.key_name == "test_key_name"
     assert client.private_key == TEST_PRIVATE_KEY
-    assert client.base_url == "https://api.coinbase.com/v2"
+    assert client.base_url == "https://api.coinbase.com"
 
 
 @responses.activate

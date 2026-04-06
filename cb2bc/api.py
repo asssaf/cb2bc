@@ -31,7 +31,7 @@ class CoinbaseClient:
         self.key_name = key_name
         self.private_key = private_key
         self.debug = debug
-        self.base_url = "https://api.coinbase.com/v2"
+        self.base_url = "https://api.coinbase.com"
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -54,6 +54,7 @@ class CoinbaseClient:
         # for the JWT URI field, as required by Coinbase.
         req = requests.Request(method, f"{self.base_url}{path}", params=params)
         prepared = req.prepare()
+
         # Extract path and query from the prepared URL
         # e.g., https://api.coinbase.com/v2/accounts?limit=25 -> /v2/accounts?limit=25
         from urllib.parse import urlparse
@@ -65,11 +66,12 @@ class CoinbaseClient:
 
         uri = f"{method} api.coinbase.com{full_path}"
 
+        now = int(time.time())
         payload = {
             "sub": self.key_name,
             "iss": "cdp",  # Coinbase requires "cdp" as issuer
-            "nbf": int(time.time()),
-            "exp": int(time.time()) + 120,  # 2 minutes
+            "nbf": now - 5,  # 5 seconds in past for clock skew
+            "exp": now + 60,  # 1 minute expiry
             "uri": uri,
         }
 
@@ -85,8 +87,6 @@ class CoinbaseClient:
         """Extract path from URI, handling absolute and relative paths"""
         if uri.startswith(self.base_url):
             return uri.replace(self.base_url, "")
-        elif uri.startswith("/v2"):
-            return uri[3:]
         return uri
 
     def _request(
@@ -147,7 +147,7 @@ class CoinbaseClient:
     def get_accounts(self) -> list[dict[str, Any]]:
         """Fetch all accounts with pagination"""
         accounts = []
-        path = "/accounts"
+        path = "/v2/accounts"
 
         while path:
             data = self._request("GET", path)
@@ -168,7 +168,7 @@ class CoinbaseClient:
     ) -> list[dict[str, Any]]:
         """Fetch transactions for an account with pagination"""
         transactions = []
-        path = f"/accounts/{account_id}/transactions"
+        path = f"/v2/accounts/{account_id}/transactions"
 
         # Build params
         params = {}
