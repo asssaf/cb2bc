@@ -80,21 +80,21 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
 
     # For buy/sell, prioritize the sub-resource for amounts if available
     resource = txn.get(txn_type) if txn_type in ("buy", "sell") else None
-    subtotal = {}
+    sub_res_subtotal = {}
     if resource:
-        # total = gross (before fee for buy, total value for sell)
-        # subtotal = net (after fee for buy, net proceeds for sell)
-        total = resource.get("total", {})
-        subtotal = resource.get("subtotal", {})
+        # subtotal = gross (before fee, used for unit price)
+        # total = net (after fee, used for cash flow)
+        sub_res_total = resource.get("total", {})
+        sub_res_subtotal = resource.get("subtotal", {})
 
-        if total.get("amount"):
-            # Use total as the gross fiat value for price calculation
-            fiat_amount = total.get("amount")
-            fiat_currency = total.get("currency")
+        if sub_res_subtotal.get("amount"):
+            # Use subtotal as the gross fiat value for price calculation
+            fiat_amount = sub_res_subtotal.get("amount")
+            fiat_currency = sub_res_subtotal.get("currency")
 
-        if subtotal.get("amount"):
-            # Use subtotal as the net fiat amount for the balancing leg
-            net_fiat_amount = subtotal.get("amount")
+        if sub_res_total.get("amount"):
+            # Use total as the net fiat amount for the balancing leg
+            net_fiat_amount = sub_res_total.get("amount")
         else:
             net_fiat_amount = fiat_amount
     else:
@@ -187,7 +187,7 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
             if other_account:
                 # Calculate net received if not explicitly provided
                 fee_dec = Decimal(fee_amount) if fee_amount else Decimal("0")
-                if not subtotal.get("amount") and fee_dec:
+                if not sub_res_subtotal.get("amount") and fee_dec:
                     net_received = gross_fiat - fee_dec
                 else:
                     net_received = abs(Decimal(net_fiat_amount))
