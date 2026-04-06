@@ -22,6 +22,27 @@ def collect_commodities(transactions: list) -> set[str]:
     return commodities
 
 
+def _get_fee(txn: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    """Extract fee amount and currency from transaction data"""
+    # Try root 'fee' field
+    if fee := txn.get("fee"):
+        return fee.get("amount"), fee.get("currency")
+
+    # Try 'network' field (often for sends/buys)
+    if network := txn.get("network"):
+        if fee := network.get("transaction_fee"):
+            return fee.get("amount"), fee.get("currency")
+
+    # Try 'buy' or 'sell' associated resources if they exist
+    # (Sometimes fees are in the sub-resource)
+    for sub in ("buy", "sell"):
+        if resource := txn.get(sub):
+            if fee := resource.get("fee"):
+                return fee.get("amount"), fee.get("currency")
+
+    return None, None
+
+
 def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional[str]:
     """
     Convert Coinbase transaction to beancount format.
@@ -48,9 +69,7 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
     fiat_currency = native.get("currency")
 
     # Extract fee
-    fee = txn.get("fee", {})
-    fee_amount = fee.get("amount")
-    fee_currency = fee.get("currency")
+    fee_amount, fee_currency = _get_fee(txn)
 
     if not crypto_amount or not crypto_currency:
         return None
@@ -165,7 +184,8 @@ def collect_accounts(transactions: list, config: dict[str, Any]) -> set[str]:
         if other_account:
             accounts.add(other_account)
 
-        if txn.get("fee"):
+        fee_amount, _ = _get_fee(txn)
+        if fee_amount:
             fee_account = get_account_for_transaction(txn_type, "fee", config)
             if fee_account:
                 accounts.add(fee_account)

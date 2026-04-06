@@ -106,6 +106,7 @@ class CoinbaseClient:
         response = self.session.send(prepared, timeout=30)
 
         if self.debug:
+            print(f"URL: {response.url}", file=sys.stderr)
             print(f"<<< Status: {response.status_code}", file=sys.stderr)
             try:
                 print(

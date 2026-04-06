@@ -48,6 +48,7 @@ def test_beancount_validity():
             "status": "completed",
             "amount": {"amount": "-0.001", "currency": "BTC"},
             "native_amount": {"amount": "60.00", "currency": "USD"},
+            "fee": {"amount": "2.99", "currency": "USD"},
             "created_at": "2024-01-16T10:30:00Z",
             "description": "Sold BTC",
         },
