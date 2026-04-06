@@ -39,7 +39,7 @@ class CoinbaseClient:
             }
         )
 
-    def _generate_jwt(self, method: str, path: str) -> str:
+    def _generate_jwt(self, method: str, path: str, params: Optional[dict] = None) -> str:
         """Generate JWT token for API request using Coinbase's official method"""
         # Load the EC private key from PEM format
         private_key_bytes = self.private_key.encode("utf-8")
@@ -48,7 +48,20 @@ class CoinbaseClient:
         )
 
         # Build URI: METHOD hostname/v2/path (must match actual request path)
-        uri = f"{method} api.coinbase.com/v2{path}"
+        # We use a PreparedRequest to normalize the URL and query parameters
+        # for the JWT URI field, as required by Coinbase.
+        req = requests.Request(method, f"{self.base_url}{path}", params=params)
+        prepared = req.prepare()
+        # Extract path and query from the prepared URL
+        # e.g., https://api.coinbase.com/v2/accounts?limit=25 -> /v2/accounts?limit=25
+        from urllib.parse import urlparse
+
+        parsed = urlparse(prepared.url)
+        full_path = parsed.path
+        if parsed.query:
+            full_path += f"?{parsed.query}"
+
+        uri = f"{method} api.coinbase.com{full_path}"
 
         payload = {
             "sub": self.key_name,
@@ -79,7 +92,7 @@ class CoinbaseClient:
     ) -> dict[str, Any]:
         """Make API request with JWT authentication"""
         # Generate JWT for this specific request
-        token = self._generate_jwt(method, path)
+        token = self._generate_jwt(method, path, params)
         url = f"{self.base_url}{path}"
         headers = {"Authorization": f"Bearer {token}"}
 
