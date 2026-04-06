@@ -39,9 +39,7 @@ class CoinbaseClient:
             }
         )
 
-    def _generate_jwt(
-        self, method: str, path: str, params: Optional[dict] = None
-    ) -> str:
+    def _generate_jwt(self, method: str, path: str) -> str:
         """Generate JWT token for API request using Coinbase's official method"""
         # Load the EC private key from PEM format
         private_key_bytes = self.private_key.encode("utf-8")
@@ -50,25 +48,9 @@ class CoinbaseClient:
         )
 
         # Build URI: METHOD hostname/v2/path (must match actual request path)
-        if "?" in path:
-            # If path already has query parameters (from next_uri), use it directly
-            full_path = path
-        else:
-            # We use a PreparedRequest to normalize the URL and query parameters
-            # for the JWT URI field, as required by Coinbase.
-            req = requests.Request(method, f"{self.base_url}{path}", params=params)
-            prepared = req.prepare()
-
-            # Extract path and query from the prepared URL
-            # e.g., https://api.coinbase.com/v2/accounts?limit=25 -> /v2/accounts?limit=25
-            from urllib.parse import urlparse
-
-            parsed = urlparse(prepared.url)
-            full_path = parsed.path
-            if parsed.query:
-                full_path += f"?{parsed.query}"
-
-        uri = f"{method} api.coinbase.com{full_path}"
+        # Note: Coinbase CDP API documentation says the URI claim should include
+        # METHOD hostname/path (query parameters are excluded from this claim)
+        uri = f"{method} api.coinbase.com{path}"
 
         if self.debug:
             print(f"JWT URI claim: {uri}", file=sys.stderr)
@@ -100,24 +82,29 @@ class CoinbaseClient:
         self, method: str, path: str, params: Optional[dict] = None
     ) -> dict[str, Any]:
         """Make API request with JWT authentication"""
+        # Normalize the URL and query parameters using a PreparedRequest
+        req = requests.Request(method, f"{self.base_url}{path}", params=params)
+        prepared = req.prepare()
+
+        # Extract only the path from the prepared URL for the JWT URI claim.
+        # Coinbase CDP API expects the URI claim without query parameters.
+        from urllib.parse import urlparse
+
+        path_only = urlparse(prepared.url).path
+
         # Generate JWT for this specific request
-        token = self._generate_jwt(method, path, params)
-        url = f"{self.base_url}{path}"
-        headers = {"Authorization": f"Bearer {token}"}
+        token = self._generate_jwt(method, path_only)
+        prepared.headers["Authorization"] = f"Bearer {token}"
 
         if self.debug:
-            print(f">>> {method} {url}", file=sys.stderr)
-            if params:
-                print(f"Params: {params}", file=sys.stderr)
-            for k, v in headers.items():
+            print(f">>> {method} {prepared.url}", file=sys.stderr)
+            for k, v in prepared.headers.items():
                 v_log = v
                 if k.lower() == "authorization":
                     v_log = "Bearer [REDACTED]"
                 print(f"Header: {k}: {v_log}", file=sys.stderr)
 
-        response = self.session.request(
-            method, url, params=params, headers=headers, timeout=30
-        )
+        response = self.session.send(prepared, timeout=30)
 
         if self.debug:
             print(f"<<< Status: {response.status_code}", file=sys.stderr)
