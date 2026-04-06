@@ -86,6 +86,15 @@ def test_beancount_validity():
             "created_at": "2024-03-01T12:00:00Z",
             "description": "Sent to external wallet",
         },
+        {
+            "id": "txn-6",
+            "type": "buy",
+            "status": "completed",
+            "amount": {"amount": "100.00", "currency": "USDC"},
+            "native_amount": {"amount": "100.00", "currency": "USD"},
+            "created_at": "2024-03-02T12:00:00Z",
+            "description": "USD to USDC conversion",
+        },
     ]
 
     beancount_content = ""

@@ -122,6 +122,11 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
     other_account = get_account_for_transaction(txn_type, category, config)
     fee_account = get_account_for_transaction(txn_type, "fee", config)
 
+    # Handle USD/USDC conversions
+    is_conversion = {crypto_currency, fiat_currency} <= {"USD", "USDC"}
+    if is_conversion and txn_type in ("buy", "sell"):
+        other_account = f"{prefix}:Conversion"
+
     # Format transaction based on type
     lines = [f'{date_str} * "{description}" ^coinbase-{txn_id}']
     lines.extend(metadata_lines)
@@ -228,6 +233,16 @@ def collect_accounts(transactions: list, config: dict[str, Any]) -> set[str]:
         txn_type = txn.get("type")
         category = mappings.get(txn_type, "transfer")
         other_account = get_account_for_transaction(txn_type, category, config)
+
+        # Handle USD/USDC conversions in account collection
+        crypto_currency = txn.get("amount", {}).get("currency")
+        fiat_currency = txn.get("native_amount", {}).get("currency")
+        if {crypto_currency, fiat_currency} <= {"USD", "USDC"} and txn_type in (
+            "buy",
+            "sell",
+        ):
+            other_account = f"{prefix}:Conversion"
+
         if other_account:
             accounts.add(other_account)
 
