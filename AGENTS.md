@@ -15,3 +15,4 @@ To find the latest commit hash for an action, go to the releases page in the act
 
 - The primary branch for this repository is `master`.
 - When making changes to the codebase, ensure that `README.md` is updated if the changes are relevant to users or documented features.
+- Before submitting any changes, you must run `ruff check .` and `ruff format .` locally to ensure the code complies with the project's standards and doesn't fail in the CI workflow.
