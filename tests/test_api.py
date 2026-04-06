@@ -98,6 +98,39 @@ def test_get_transactions():
 
 
 @responses.activate
+def test_get_transactions_pagination():
+    """Fetch transactions for an account with pagination"""
+    # Mock first page
+    responses.add(
+        responses.GET,
+        "https://api.coinbase.com/v2/accounts/acc-123/transactions",
+        json={
+            "pagination": {"next_uri": "/v2/accounts/acc-123/transactions?starting_after=txn-2"},
+            "data": [{"id": "txn-1", "type": "buy"}, {"id": "txn-2", "type": "sell"}],
+        },
+        status=200,
+    )
+    # Mock second page
+    responses.add(
+        responses.GET,
+        "https://api.coinbase.com/v2/accounts/acc-123/transactions?starting_after=txn-2",
+        json={
+            "pagination": {"next_uri": None},
+            "data": [{"id": "txn-3", "type": "buy"}],
+        },
+        status=200,
+    )
+
+    client = CoinbaseClient(key_name="test_key_name", private_key=TEST_PRIVATE_KEY)
+    transactions = client.get_transactions("acc-123")
+
+    assert len(transactions) == 3
+    assert transactions[0]["id"] == "txn-1"
+    assert transactions[1]["id"] == "txn-2"
+    assert transactions[2]["id"] == "txn-3"
+
+
+@responses.activate
 def test_unauthorized_error():
     """401 raises clear error message"""
     responses.add(
