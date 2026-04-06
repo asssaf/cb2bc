@@ -70,3 +70,26 @@ def test_cli_basic_flow(tmp_path, monkeypatch):
     assert result.exit_code == 0
     assert "commodity BTC" in result.output
     assert "Assets:Coinbase:BTC" in result.output
+
+
+@responses.activate
+def test_cli_extra_verbose(tmp_path, monkeypatch):
+    """Extra verbose mode logs API requests to stderr"""
+    monkeypatch.setenv("COINBASE_KEY_NAME", "test_key_name")
+    monkeypatch.setenv("COINBASE_PRIVATE_KEY", TEST_PRIVATE_KEY)
+
+    # Mock accounts response
+    responses.add(
+        responses.GET,
+        "https://api.coinbase.com/v2/accounts",
+        json={"data": []},
+        status=200,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["-vv"])
+
+    assert result.exit_code == 0
+    # Check that API logs appear in stderr
+    assert ">>> GET https://api.coinbase.com/v2/accounts" in result.stderr
+    assert "<<< Status: 200" in result.stderr

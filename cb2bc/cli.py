@@ -20,7 +20,9 @@ from cb2bc.converter import convert_transaction, generate_declarations
 @click.option(
     "--config", "config_path", type=click.Path(exists=True), help="Config file path"
 )
-@click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+@click.option(
+    "--verbose", "-v", count=True, help="Verbose output (use -vv for even more)"
+)
 def main(
     from_date: Optional[str],
     to_date: Optional[str],
@@ -28,7 +30,7 @@ def main(
     output: Optional[str],
     append: bool,
     config_path: Optional[str],
-    verbose: bool,
+    verbose: int,
 ):
     """Fetch Coinbase transactions and convert to beancount format"""
 
@@ -58,23 +60,25 @@ def main(
 
     try:
         # Initialize API client
-        client = CoinbaseClient(config["key_name"], config["private_key"])
+        client = CoinbaseClient(
+            config["key_name"], config["private_key"], debug=(verbose >= 2)
+        )
 
         # Get accounts
         if account:
             account_ids = [account]
         else:
-            if verbose:
+            if verbose >= 1:
                 click.echo("Discovering accounts...", err=True)
             accounts = client.get_accounts()
             account_ids = [acc["id"] for acc in accounts]
-            if verbose:
+            if verbose >= 1:
                 click.echo(f"Found {len(account_ids)} accounts", err=True)
 
         # Fetch transactions
         all_transactions = []
         for acc_id in account_ids:
-            if verbose:
+            if verbose >= 1:
                 click.echo(f"Fetching transactions for {acc_id}...", err=True)
             transactions = client.get_transactions(acc_id, start_date, end_date)
             all_transactions.extend(transactions)
@@ -113,7 +117,7 @@ def main(
             click.echo(output_text)
 
         # Summary
-        if verbose:
+        if verbose >= 1:
             click.echo(
                 f"\nConverted {converted_count} transactions ({skipped_count} skipped)",
                 err=True,
@@ -124,7 +128,7 @@ def main(
         sys.exit(1)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
-        if verbose:
+        if verbose >= 1:
             raise
         sys.exit(1)
 
