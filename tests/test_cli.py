@@ -1,4 +1,5 @@
 # tests/test_cli.py
+import json
 from pathlib import Path
 
 import responses
@@ -93,3 +94,50 @@ def test_cli_extra_verbose(tmp_path, monkeypatch):
     # Check that API logs appear in stderr
     assert ">>> GET https://api.coinbase.com/v2/accounts" in result.stderr
     assert "<<< Status: 200" in result.stderr
+
+
+def test_cli_replay_mode(tmp_path):
+    """CLI replays responses from a directory, bypassing credentials"""
+    replay_dir = tmp_path / "replay"
+    replay_dir.mkdir()
+
+    # Create a fixture file
+    accounts_fixture = replay_dir / "GET_v2_accounts.json"
+    accounts_fixture.write_text(
+        json.dumps(
+            {
+                "data": [{"id": "acc-replay", "currency": {"code": "ETH"}}],
+                "pagination": {"next_uri": None},
+            }
+        )
+    )
+
+    # Create transactions fixture
+    tx_fixture = replay_dir / "GET_v2_accounts_acc-replay_transactions.json"
+    tx_fixture.write_text(
+        json.dumps(
+            {
+                "data": [
+                    {
+                        "id": "txn-replay",
+                        "type": "buy",
+                        "status": "completed",
+                        "amount": {"amount": "1.0", "currency": "ETH"},
+                        "native_amount": {"amount": "2000.00", "currency": "USD"},
+                        "created_at": "2024-02-01T12:00:00Z",
+                        "description": "Bought ETH",
+                    }
+                ],
+                "pagination": {"next_uri": None},
+            }
+        )
+    )
+
+    runner = CliRunner()
+    # Run with --replay, no credentials provided
+    result = runner.invoke(main, ["--replay", str(replay_dir)])
+
+    assert result.exit_code == 0
+    assert "ETH" in result.output
+    # The output contains the coinbase_id metadata
+    assert 'coinbase_id: "txn-replay"' in result.output

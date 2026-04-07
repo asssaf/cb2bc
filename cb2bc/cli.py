@@ -23,6 +23,12 @@ from cb2bc.converter import convert_transaction, generate_declarations
 @click.option(
     "--verbose", "-v", count=True, help="Verbose output (use -vv for even more)"
 )
+@click.option("--record", type=click.Path(), help="Directory to record API responses")
+@click.option(
+    "--replay",
+    type=click.Path(exists=True),
+    help="Directory to replay API responses from",
+)
 def main(
     from_date: Optional[str],
     to_date: Optional[str],
@@ -31,6 +37,8 @@ def main(
     append: bool,
     config_path: Optional[str],
     verbose: int,
+    record: Optional[str] = None,
+    replay: Optional[str] = None,
 ):
     """Fetch Coinbase transactions and convert to beancount format"""
 
@@ -42,7 +50,10 @@ def main(
     config = load_config(config_file)
 
     # Check for credentials
-    if not config.get("key_name") or not config.get("private_key"):
+    fixture_dir = replay or config.get("fixture_dir")
+    if not fixture_dir and (
+        not config.get("key_name") or not config.get("private_key")
+    ):
         msg = (
             "Error: Missing credentials. Set COINBASE_KEY_NAME and "
             "COINBASE_PRIVATE_KEY or add to config file."
@@ -61,7 +72,11 @@ def main(
     try:
         # Initialize API client
         client = CoinbaseClient(
-            config["key_name"], config["private_key"], debug=(verbose >= 2)
+            config.get("key_name"),
+            config.get("private_key"),
+            debug=(verbose >= 2),
+            record_dir=record,
+            fixture_dir=fixture_dir,
         )
 
         # Get accounts
