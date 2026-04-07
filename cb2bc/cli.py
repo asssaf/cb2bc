@@ -23,6 +23,11 @@ from cb2bc.converter import convert_transaction, generate_declarations
 @click.option(
     "--verbose", "-v", count=True, help="Verbose output (use -vv for even more)"
 )
+@click.option(
+    "--unit-price-precision",
+    type=click.IntRange(min=0),
+    help="Calculate and add unit price with given precision",
+)
 @click.option("--record", type=click.Path(), help="Directory to record API responses")
 @click.option(
     "--replay",
@@ -37,6 +42,7 @@ def main(
     append: bool,
     config_path: Optional[str],
     verbose: int,
+    unit_price_precision: Optional[int],
     record: Optional[str] = None,
     replay: Optional[str] = None,
 ):
@@ -48,6 +54,10 @@ def main(
     else:
         config_file = Path.home() / ".config" / "coinbase-beancount" / "config.json"
     config = load_config(config_file)
+
+    # Set unit price precision if provided
+    if unit_price_precision is not None:
+        config["unit_price_precision"] = unit_price_precision
 
     # Check for credentials
     fixture_dir = replay or config.get("fixture_dir")

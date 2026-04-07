@@ -29,8 +29,32 @@ def test_convert_buy_transaction():
 
     assert '2024-01-15 * "Bought BTC" ^coinbase-txn-123' in result
     assert "Assets:Coinbase:BTC" in result
-    assert "0.001 BTC @ 50000.00 USD" in result
+    assert "0.001 BTC" in result
+    assert "@" not in result
     assert "Assets:Bank:Checking  -50.00 USD" in result
+
+
+def test_convert_buy_transaction_with_precision():
+    """Convert buy transaction with unit price precision"""
+    config = {
+        "account_prefix": "Assets:Coinbase",
+        "default_accounts": {"bank_checking": "Assets:Bank:Checking"},
+        "unit_price_precision": 4,
+    }
+
+    txn = {
+        "id": "txn-123",
+        "type": "buy",
+        "status": "completed",
+        "amount": {"amount": "0.001", "currency": "BTC"},
+        "native_amount": {"amount": "50.00", "currency": "USD"},
+        "created_at": "2024-01-15T10:30:00Z",
+        "description": "Bought BTC",
+    }
+
+    result = convert_transaction(txn, config)
+
+    assert "0.001 BTC @ 50000.0000 USD" in result
 
 
 def test_convert_staking_reward():

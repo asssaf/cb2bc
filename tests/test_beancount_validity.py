@@ -30,6 +30,7 @@ def test_beancount_validity():
             "fees": "Expenses:Fees:Coinbase",
             "bank_checking": "Assets:Bank:Checking",
         },
+        "unit_price_precision": 2,
     }
 
     transactions = [

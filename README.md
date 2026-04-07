@@ -52,6 +52,12 @@ Fetch with date range:
 cb2bc --from 2024-01-01 --to 2024-12-31
 ```
 
+Calculate and include unit prices with specific precision:
+
+```bash
+cb2bc --unit-price-precision 2
+```
+
 Write to file:
 
 ```bash
@@ -95,14 +101,14 @@ You can run `cb2bc` offline by using previously recorded API responses. This is 
 
 ## Output Format
 
-The tool generates valid beancount format with:
+The tool generates beancount format with:
 
 - Commodity declarations for all currencies
-- Price annotations for buy/sell transactions
+- Optional price annotations for buy/sell transactions (use `--unit-price-precision` to enable)
 - Metadata (Coinbase transaction ID and timestamp)
 - Links for connecting related transactions
 
-Example output:
+Example output (default, without unit prices):
 
 ```beancount
 1970-01-01 commodity BTC
@@ -111,9 +117,11 @@ Example output:
 2024-01-15 * "Bought BTC" ^coinbase-txn-123
   coinbase_id: "txn-123"
   coinbase_timestamp: "2024-01-15T10:30:00Z"
-  Assets:Coinbase:BTC  0.001 BTC {50000.00 USD}
-  Assets:Bank:Checking
+  Assets:Coinbase:BTC  0.001 BTC
+  Assets:Bank:Checking  -50.00 USD
 ```
+
+> **Note:** By default, unit prices are omitted. Beancount requires unit prices or costs for transactions involving multiple commodities to balance. If you need the output to pass `bean-check`, use the `--unit-price-precision` flag.
 
 ## Transaction Types
 

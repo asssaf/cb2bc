@@ -131,9 +131,15 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
     lines.extend(metadata_lines)
 
     if txn_type in ("buy", "sell"):
-        # Calculate price
-        if fiat_amount and fiat_currency:
-            crypto_dec = Decimal(crypto_amount)
+        crypto_dec = Decimal(crypto_amount)
+
+        # Calculate price if precision is specified
+        if (
+            fiat_amount
+            and fiat_currency
+            and config.get("unit_price_precision") is not None
+        ):
+            precision = config["unit_price_precision"]
             # gross_fiat is the value before fee
             gross_fiat = Decimal(fiat_amount)
             price = abs(gross_fiat / crypto_dec)
@@ -141,9 +147,14 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
             # Record crypto leg
             lines.append(
                 f"  {crypto_account}  {crypto_amount} "
-                f"{crypto_currency} @ {price:.2f} {fiat_currency}"
+                f"{crypto_currency} @ {price:.{precision}f} {fiat_currency}"
             )
+        else:
+            # Record crypto leg without price
+            lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
 
+        # Record remaining legs if fiat is available
+        if fiat_amount and fiat_currency:
             # Record fee leg
             if fee_amount and fee_currency:
                 lines.append(f"  {fee_account}  {fee_amount} {fee_currency}")
@@ -159,7 +170,6 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
 
                 lines.append(f"  {other_account}  {balancing_amount} {fiat_currency}")
         else:
-            lines.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
             if other_account:
                 lines.append(f"  {other_account}")
 
