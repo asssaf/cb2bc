@@ -8,7 +8,7 @@ import click
 
 from cb2bc.api import CoinbaseAPIError, CoinbaseClient
 from cb2bc.config import load_config
-from cb2bc.converter import convert_transaction, generate_declarations
+from cb2bc.converter import convert_transaction, generate_declarations, get_shared_id
 
 
 @click.command()
@@ -107,18 +107,31 @@ def main(
             if declarations:
                 beancount_lines.append(declarations)
 
-        # Convert each transaction
+        # Group transactions by shared internal ID
+        groups = {}
+        for txn in sorted(all_transactions, key=lambda t: t.get("created_at", "")):
+            # Check for shared ID in buy, sell, or trade fields
+            shared_id = get_shared_id(txn)
+
+            if shared_id:
+                if shared_id not in groups:
+                    groups[shared_id] = []
+                groups[shared_id].append(txn)
+            else:
+                groups[txn["id"]] = [txn]
+
+        # Convert each transaction group
         converted_count = 0
         skipped_count = 0
 
-        for txn in sorted(all_transactions, key=lambda t: t.get("created_at", "")):
-            result = convert_transaction(txn, config)
+        for txn_group in groups.values():
+            result = convert_transaction(txn_group, config)
             if result:
                 beancount_lines.append(result)
                 beancount_lines.append("")  # Blank line between transactions
-                converted_count += 1
+                converted_count += len(txn_group)
             else:
-                skipped_count += 1
+                skipped_count += len(txn_group)
 
         # Output
         output_text = "\n".join(beancount_lines)
