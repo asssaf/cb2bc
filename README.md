@@ -78,7 +78,17 @@ cb2bc --verbose
 
 # Extra verbose mode (logs all API requests and responses)
 cb2bc -vv
+
+# Record API responses to a directory
+cb2bc --record ./my-fixtures
 ```
+
+## Offline Mode and Fixtures
+
+You can run `cb2bc` offline by using previously recorded API responses. This is useful for testing or repeating conversions without hitting the Coinbase API.
+
+1. **Record**: Run with the `--record <DIR>` flag to save all API responses as JSON files in the specified directory.
+2. **Playback**: Add `"fixture_dir": "<DIR>"` to your `config.json`. When this is set, `cb2bc` will first look for a matching fixture file in that directory before attempting to call the API. If a fixture is found, it will be used even if you are offline or haven't provided API credentials.
 
 ## Output Format
 

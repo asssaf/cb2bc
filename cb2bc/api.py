@@ -1,5 +1,6 @@
 # cb2bc/api.py
 import json
+import os
 import secrets
 import sys
 import time
@@ -28,10 +29,19 @@ class CoinbaseAPIError(Exception):
 class CoinbaseClient:
     """Client for Coinbase App API with JWT authentication"""
 
-    def __init__(self, key_name: str, private_key: str, debug: bool = False):
+    def __init__(
+        self,
+        key_name: Optional[str] = None,
+        private_key: Optional[str] = None,
+        debug: bool = False,
+        record_dir: Optional[str] = None,
+        fixture_dir: Optional[str] = None,
+    ):
         self.key_name = key_name
         self.private_key = private_key
         self.debug = debug
+        self.record_dir = record_dir
+        self.fixture_dir = fixture_dir
         self.base_url = "https://api.coinbase.com"
         self.session = requests.Session()
         self.session.headers.update(
@@ -42,6 +52,9 @@ class CoinbaseClient:
 
     def _generate_jwt(self, method: str, path: str) -> str:
         """Generate JWT token for API request using Coinbase's official method"""
+        if not self.private_key or not self.key_name:
+            return "mock-token"
+
         # Load the EC private key from PEM format
         private_key_bytes = self.private_key.encode("utf-8")
         private_key = serialization.load_pem_private_key(
@@ -79,6 +92,21 @@ class CoinbaseClient:
             return uri.replace(self.base_url, "")
         return uri
 
+    def _get_fixture_filename(self, method: str, url: str) -> str:
+        """Generate a stable filename for a request fixture"""
+        parsed = urlparse(url)
+        path = parsed.path
+        query = parsed.query
+
+        safe_path = path.strip("/").replace("/", "_")
+        name = f"{method}_{safe_path}"
+        if query:
+            # Sanitize query parameters for filename
+            # Keep it simple and predictable
+            safe_query = "".join(c if c.isalnum() or c in "-_=" else "_" for c in query)
+            name = f"{name}_{safe_query}"
+        return f"{name}.json"
+
     def _request(
         self, method: str, path: str, params: Optional[dict] = None
     ) -> dict[str, Any]:
@@ -86,6 +114,18 @@ class CoinbaseClient:
         # Normalize the URL and query parameters using a PreparedRequest
         req = requests.Request(method, f"{self.base_url}{path}", params=params)
         prepared = req.prepare()
+
+        if self.fixture_dir:
+            filename = self._get_fixture_filename(method, prepared.url)
+            fixture_path = os.path.join(self.fixture_dir, filename)
+            if os.path.exists(fixture_path):
+                if self.debug:
+                    print(f"Loading fixture from {fixture_path}", file=sys.stderr)
+                with open(fixture_path) as f:
+                    return json.load(f)
+            elif not self.private_key or not self.key_name:
+                msg = f"Fixture not found and no credentials: {fixture_path}"
+                raise CoinbaseAPIError(msg)
 
         # Extract only the path from the prepared URL for the JWT URI claim.
         # Coinbase CDP API expects the URI claim without query parameters.
@@ -136,7 +176,18 @@ class CoinbaseClient:
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
             raise CoinbaseAPIError(str(e), status_code=e.response.status_code) from e
-        return response.json()
+
+        response_json = response.json()
+        if self.record_dir:
+            os.makedirs(self.record_dir, exist_ok=True)
+            filename = self._get_fixture_filename(method, prepared.url)
+            fixture_path = os.path.join(self.record_dir, filename)
+            if self.debug:
+                print(f"Recording fixture to {fixture_path}", file=sys.stderr)
+            with open(fixture_path, "w") as f:
+                json.dump(response_json, f, indent=2)
+
+        return response_json
 
     def get_accounts(self) -> list[dict[str, Any]]:
         """Fetch all accounts with pagination"""
