@@ -135,13 +135,12 @@ def convert_transaction(txn: dict[str, Any], config: dict[str, Any]) -> Optional
         if fiat_amount and fiat_currency:
             crypto_dec = Decimal(crypto_amount)
             # gross_fiat is the value before fee
-            gross_fiat = Decimal(fiat_amount)
-            price = abs(gross_fiat / crypto_dec)
+            gross_fiat = abs(Decimal(fiat_amount))
 
             # Record crypto leg
             lines.append(
                 f"  {crypto_account}  {crypto_amount} "
-                f"{crypto_currency} @ {price:.2f} {fiat_currency}"
+                f"{crypto_currency} @@ {gross_fiat} {fiat_currency}"
             )
 
             # Record fee leg
