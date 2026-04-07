@@ -156,7 +156,8 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
                 f"  {crypto_account}  {crypto_amount} {crypto_currency} "
                 f"@@ {gross_fiat_dec} {txn_fiat_currency}"
             )
-            # The value of this posting is positive if we gain crypto, negative if we lose
+            # The value of this posting is positive if we gain crypto,
+            # negative if we lose
             fiat_balance += gross_fiat_dec if crypto_dec >= 0 else -gross_fiat_dec
         else:
             postings.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
@@ -193,7 +194,9 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
             # For merged transactions, use explicit balancing amount to be safe
             balancing_amount = -fiat_balance
             if fiat_currency:
-                postings.append(f"  {other_account}  {balancing_amount} {fiat_currency}")
+                postings.append(
+                    f"  {other_account}  {balancing_amount} {fiat_currency}"
+                )
             else:
                 postings.append(f"  {other_account}  {balancing_amount}")
     elif len(postings) == 1 or (
