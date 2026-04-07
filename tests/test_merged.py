@@ -109,3 +109,25 @@ def test_crypto_to_crypto_merged():
     # We have fees, so we need a balancing leg (unless it already balances,
     # but here it does not since ETH/BTC legs use the same 2990 USD total price).
     assert "Assets:Bank:Checking" in result
+
+
+def test_usdc_formatting():
+    config = {
+        "account_prefix": "Assets:Coinbase",
+        "default_accounts": {"transfers": "Equity:Transfers"},
+    }
+
+    txn = {
+        "id": "txn-usdc-123",
+        "type": "send",
+        "status": "completed",
+        "amount": {"amount": "100.00", "currency": "USDC"},
+        "native_amount": {"amount": "100.00", "currency": "USD"},
+        "created_at": "2024-01-15T10:30:00Z",
+        "description": "Sent USDC",
+    }
+
+    result = convert_transaction(txn, config)
+
+    assert "Assets:Coinbase:USDC  100.00 USDC @ 1.00 USD" in result
+    assert "Equity:Transfers" in result

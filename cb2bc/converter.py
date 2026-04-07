@@ -160,7 +160,15 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
             # negative if we lose
             fiat_balance += gross_fiat_dec if crypto_dec >= 0 else -gross_fiat_dec
         else:
-            postings.append(f"  {crypto_account}  {crypto_amount} {crypto_currency}")
+            if crypto_currency == "USDC":
+                postings.append(
+                    f"  {crypto_account}  {crypto_amount} {crypto_currency} @ 1.00 USD"
+                )
+            else:
+                postings.append(
+                    f"  {crypto_account}  {crypto_amount} {crypto_currency}"
+                )
+
             if crypto_currency in ("USD", "USDC"):
                 # Fiat posting directly affects balance
                 fiat_balance += crypto_dec
