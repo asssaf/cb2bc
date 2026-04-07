@@ -101,11 +101,11 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
     lines = [f'{date_str} * "{description}" ^coinbase-{link_id}']
 
     # Metadata
-    for t in txns:
-        lines.append(f'  coinbase_id: "{t.get("id")}"')
+    txn_ids = " ".join([t.get("id", "") for t in txns])
+    lines.append(f'  coinbase_id: "{txn_ids}"')
     lines.append(f'  coinbase_timestamp: "{created_at}"')
     if shared_id:
-        lines.append(f'  coinbase_shared_id: "{shared_id}"')
+        lines.append(f'  coinbase_trade_id: "{shared_id}"')
 
     # Collect postings and balance (in fiat equivalent)
     postings = []
@@ -186,7 +186,8 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
     # Add balancing leg if needed
     if abs(fiat_balance) > Decimal("0.00000001"):
         txn_type = first_txn.get("type")
-        category = mappings.get(txn_type, "transfer")
+        # For merged transactions, the balancing leg is usually the fee
+        category = "fee" if len(txns) > 1 else mappings.get(txn_type, "transfer")
         other_account = get_account_for_transaction(txn_type, category, config)
 
         # Handle USD/USDC conversions for single transactions
