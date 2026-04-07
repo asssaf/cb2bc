@@ -24,6 +24,11 @@ from cb2bc.converter import convert_transaction, generate_declarations
     "--verbose", "-v", count=True, help="Verbose output (use -vv for even more)"
 )
 @click.option("--record", type=click.Path(), help="Directory to record API responses")
+@click.option(
+    "--replay",
+    type=click.Path(exists=True),
+    help="Directory to replay API responses from",
+)
 def main(
     from_date: Optional[str],
     to_date: Optional[str],
@@ -33,6 +38,7 @@ def main(
     config_path: Optional[str],
     verbose: int,
     record: Optional[str] = None,
+    replay: Optional[str] = None,
 ):
     """Fetch Coinbase transactions and convert to beancount format"""
 
@@ -44,7 +50,7 @@ def main(
     config = load_config(config_file)
 
     # Check for credentials
-    fixture_dir = config.get("fixture_dir")
+    fixture_dir = replay or config.get("fixture_dir")
     if not fixture_dir and (
         not config.get("key_name") or not config.get("private_key")
     ):
