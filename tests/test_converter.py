@@ -29,7 +29,7 @@ def test_convert_buy_transaction():
 
     assert '2024-01-15 * "Bought BTC" ^coinbase-txn-123' in result
     assert "Assets:Coinbase:BTC" in result
-    assert "0.001 BTC @ 50000.00 USD" in result
+    assert "0.001 BTC @@ 50.00 USD" in result
     assert "Assets:Bank:Checking  -50.00 USD" in result
 
 
