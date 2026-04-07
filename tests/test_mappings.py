@@ -35,3 +35,14 @@ def test_get_account_for_transfers():
     config = {"default_accounts": {"transfers": "Equity:MyTransfers"}}
     account = get_account_for_transaction("send", "transfer", config)
     assert account == "Equity:MyTransfers"
+
+
+def test_get_account_for_interest():
+    """Interest transactions map to Income:Interest"""
+    config = {}
+    account = get_account_for_transaction("interest", "interest", config)
+    assert account == "Income:Interest"
+
+    config = {"default_accounts": {"interest_income": "Income:MyInterest"}}
+    account = get_account_for_transaction("interest", "interest", config)
+    assert account == "Income:MyInterest"

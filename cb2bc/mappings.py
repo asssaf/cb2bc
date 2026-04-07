@@ -17,6 +17,7 @@ DEFAULT_MAPPINGS = {
     "staking_reward": "staking",
     "inflation_reward": "staking",
     "learning_reward": "income",
+    "interest": "interest",
     # Fees
     "pro_fee": "fee",
     "coinbase_fee": "fee",
@@ -44,6 +45,8 @@ def get_account_for_transaction(txn_type: str, category: str, config: dict) -> s
 
     if category == "staking" or category == "income":
         return defaults.get("staking_income", "Income:Staking")
+    elif category == "interest":
+        return defaults.get("interest_income", "Income:Interest")
     elif category == "fee":
         return defaults.get("fees", "Expenses:Fees:Coinbase")
     elif category in ("buy", "sell"):
