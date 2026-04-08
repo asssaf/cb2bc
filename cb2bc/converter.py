@@ -190,14 +190,8 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         category = "fee" if len(txns) > 1 else mappings.get(txn_type, "transfer")
         other_account = get_account_for_transaction(txn_type, category, config)
 
-        # Handle USD/USDC conversions for single transactions
+        # Use implicit balancing for single transactions
         if len(txns) == 1:
-            c_curr = first_txn.get("amount", {}).get("currency")
-            f_curr = first_txn.get("native_amount", {}).get("currency")
-            if {c_curr, f_curr} <= {"USD", "USDC"} and txn_type in ("buy", "sell"):
-                other_account = f"{prefix}:Conversion"
-
-            # Use implicit balancing for single transactions
             postings.append(f"  {other_account}")
         else:
             # For merged transactions, use explicit balancing amount to be safe
@@ -258,16 +252,6 @@ def collect_accounts(transactions: list, config: dict[str, Any]) -> set[str]:
         txn_type = first_txn.get("type")
         category = mappings.get(txn_type, "transfer")
         other_account = get_account_for_transaction(txn_type, category, config)
-
-        # Handle USD/USDC conversions in account collection
-        if len(txn_group) == 1:
-            crypto_currency = first_txn.get("amount", {}).get("currency")
-            fiat_currency = first_txn.get("native_amount", {}).get("currency")
-            if {crypto_currency, fiat_currency} <= {"USD", "USDC"} and txn_type in (
-                "buy",
-                "sell",
-            ):
-                other_account = f"{prefix}:Conversion"
 
         if other_account:
             accounts.add(other_account)
