@@ -215,18 +215,44 @@ class CoinbaseClient:
         transactions = []
         path = f"/v2/accounts/{account_id}/transactions"
 
-        # Build params
+        # Date filtering is handled client-side as Coinbase API
+        # does not consistently support start_date/end_date params
         params = {}
-        if start_date:
-            params["start_date"] = start_date.isoformat()
-        if end_date:
-            params["end_date"] = end_date.isoformat()
 
         # Handle pagination
         while path:
             try:
                 data = self._request("GET", path, params=params)
-                transactions.extend(data.get("data", []))
+                batch = data.get("data", [])
+
+                for txn in batch:
+                    created_at = txn.get("created_at")
+                    if not created_at:
+                        transactions.append(txn)
+                        continue
+
+                    txn_date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+
+                    # Optimization: stop fetching if we reached transactions
+                    # older than start_date (API returns most recent first)
+                    if start_date:
+                        compare_start = start_date
+                        if compare_start.tzinfo is None:
+                            compare_start = compare_start.replace(
+                                tzinfo=txn_date.tzinfo
+                            )
+                        if txn_date < compare_start:
+                            return transactions
+
+                    # Skip transactions newer than end_date
+                    if end_date:
+                        compare_end = end_date
+                        if compare_end.tzinfo is None:
+                            compare_end = compare_end.replace(tzinfo=txn_date.tzinfo)
+                        if txn_date > compare_end:
+                            continue
+
+                    transactions.append(txn)
 
                 # Check for next page
                 pagination = data.get("pagination", {})
