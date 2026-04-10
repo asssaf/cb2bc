@@ -166,11 +166,10 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         if is_advanced_trade:
             # For advanced_trade_fill, commissions come in pairs.
             # Only take the fee from the non-quote currency side of each pair
-            # to sum all unique commissions correctly.
+            # to have one commission posting per fill.
             if crypto_currency == quote_currency:
                 fee_amt, fee_curr = None, None
-            # Do NOT deduplicate fees for advanced trade fills because
-            # multiple fills might have the same commission amount.
+
             if fee_amt and fee_curr:
                 fees.append((fee_amt, fee_curr))
         else:
@@ -261,18 +260,28 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
                     # Other crypto legs without @@ use native_amount for balancing
                     fiat_balance += Decimal(txn_fiat_amount)
 
-    # Consolidate fees by currency
-    consolidated_fees = {}
-    for f_amt, f_curr in fees:
-        current_total = consolidated_fees.get(f_curr, Decimal("0"))
-        consolidated_fees[f_curr] = current_total + Decimal(f_amt)
-
     # Add fee postings
-    for f_curr, f_amt in sorted(consolidated_fees.items()):
-        fee_account = get_account_for_transaction(first_txn.get("type"), "fee", config)
-        postings.append(f"  {fee_account}  {f_amt:f} {f_curr}")
-        # Fees are expenses (fiat inflow to the expense account, outflow from assets)
-        fiat_balance += f_amt
+    if is_advanced_trade:
+        # For advanced trade, we keep separate fee postings per fill
+        for f_amt, f_curr in fees:
+            fee_account = get_account_for_transaction(
+                first_txn.get("type"), "fee", config
+            )
+            postings.append(f"  {fee_account}  {Decimal(f_amt):f} {f_curr}")
+            fiat_balance += Decimal(f_amt)
+    else:
+        # Consolidate fees by currency for regular transactions
+        consolidated_fees = {}
+        for f_amt, f_curr in fees:
+            current_total = consolidated_fees.get(f_curr, Decimal("0"))
+            consolidated_fees[f_curr] = current_total + Decimal(f_amt)
+
+        for f_curr, f_amt in sorted(consolidated_fees.items()):
+            fee_account = get_account_for_transaction(
+                first_txn.get("type"), "fee", config
+            )
+            postings.append(f"  {fee_account}  {f_amt:f} {f_curr}")
+            fiat_balance += f_amt
 
     # Add balancing leg if needed
     if abs(fiat_balance) > Decimal("0.00000001"):

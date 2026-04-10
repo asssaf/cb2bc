@@ -159,6 +159,84 @@ def test_advanced_trade_fill_fil_usd_buy():
     assert "Assets:Bank:Checking" not in result
 
 
+def test_advanced_trade_fill_multiple_fills():
+    config = {
+        "account_prefix": "Assets:Coinbase",
+        "default_accounts": {
+            "bank_checking": "Assets:Bank:Checking",
+            "fees": "Expenses:Fees:Coinbase",
+        },
+    }
+
+    # Two fills for the same order
+    fill1_usd = {
+        "advanced_trade_fill": {
+            "commission": "1.0",
+            "fill_price": "50000",
+            "order_id": "multi-fill",
+            "product_id": "BTC-USD",
+        },
+        "amount": {"amount": "-100.0", "currency": "USD"},
+        "created_at": "2024-01-15T10:30:00Z",
+        "id": "f1-usd",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+    fill1_btc = {
+        "advanced_trade_fill": {
+            "commission": "1.0",
+            "fill_price": "50000",
+            "order_id": "multi-fill",
+            "product_id": "BTC-USD",
+        },
+        "amount": {"amount": "0.002", "currency": "BTC"},
+        "created_at": "2024-01-15T10:30:00Z",
+        "id": "f1-btc",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+    fill2_usd = {
+        "advanced_trade_fill": {
+            "commission": "2.0",
+            "fill_price": "50000",
+            "order_id": "multi-fill",
+            "product_id": "BTC-USD",
+        },
+        "amount": {"amount": "-200.0", "currency": "USD"},
+        "created_at": "2024-01-15T10:30:05Z",
+        "id": "f2-usd",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+    fill2_btc = {
+        "advanced_trade_fill": {
+            "commission": "2.0",
+            "fill_price": "50000",
+            "order_id": "multi-fill",
+            "product_id": "BTC-USD",
+        },
+        "amount": {"amount": "0.004", "currency": "BTC"},
+        "created_at": "2024-01-15T10:30:05Z",
+        "id": "f2-btc",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+
+    result = convert_transaction([fill1_usd, fill1_btc, fill2_usd, fill2_btc], config)
+
+    # Unit priced legs
+    assert "Assets:Coinbase:BTC  0.002 BTC @ 50000 USD" in result
+    assert "Assets:Coinbase:BTC  0.004 BTC @ 50000 USD" in result
+    # Net fiat legs: -100 - 1 = -101, -200 - 2 = -202
+    assert "Assets:Coinbase:USD  -101.0 USD @ 1.00 USD" in result
+    assert "Assets:Coinbase:USD  -202.0 USD @ 1.00 USD" in result
+    # Separate fee postings
+    assert "Expenses:Fees:Coinbase  1.0 USD" in result
+    assert "Expenses:Fees:Coinbase  2.0 USD" in result
+    # Should be balanced
+    assert "Assets:Bank:Checking" not in result
+
+
 def test_scientific_notation_avoidance():
     # Test with small decimal that normally triggers scientific notation
     config = {
