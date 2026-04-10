@@ -53,5 +53,6 @@ def test_advanced_trade_fill_merge():
     assert expected_header in result
     assert "Assets:Coinbase:BTC  -0.1 BTC @@ 12269.8 USDC" in result
     # USDC leg should be net of commission: 12269.8 - 49.0792 = 12220.7208
-    assert "Assets:Coinbase:USDC  12220.7208 USDC" in result
+    # and include the valuation
+    assert "Assets:Coinbase:USDC  12220.7208 USDC @ 1.00 USD" in result
     assert "Expenses:Fees:Coinbase  49.0792 USD" in result

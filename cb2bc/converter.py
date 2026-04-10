@@ -242,7 +242,14 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
                 else:
                     net_amount = crypto_dec + commission_total
 
-                postings.append(f"  {crypto_account}  {net_amount} {crypto_currency}")
+                if crypto_currency == "USDC":
+                    postings.append(
+                        f"  {crypto_account}  {net_amount} {crypto_currency} @ 1.00 USD"
+                    )
+                else:
+                    postings.append(
+                        f"  {crypto_account}  {net_amount} {crypto_currency}"
+                    )
                 fiat_balance += net_amount
             elif crypto_currency == "USDC":
                 postings.append(
