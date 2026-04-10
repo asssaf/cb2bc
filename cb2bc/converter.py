@@ -75,6 +75,105 @@ def get_shared_id(txn: dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _group_atf_into_fills(txns: list[dict[str, Any]]) -> list[tuple[dict, dict]]:
+    """Group advanced_trade_fill transactions into pairs (fills)"""
+    quote_txns = []
+    base_txns = []
+
+    for t in txns:
+        currency = t.get("amount", {}).get("currency")
+        if currency in ("USD", "USDC"):
+            quote_txns.append(t)
+        else:
+            base_txns.append(t)
+
+    fills = []
+    used_quote_ids = set()
+
+    for base in base_txns:
+        atf_b = base.get("advanced_trade_fill", {})
+        # Find a matching quote
+        match = None
+        for quote in quote_txns:
+            if quote["id"] in used_quote_ids:
+                continue
+            atf_q = quote.get("advanced_trade_fill", {})
+            if (
+                atf_b.get("commission") == atf_q.get("commission")
+                and atf_b.get("fill_price") == atf_q.get("fill_price")
+                and atf_b.get("product_id") == atf_q.get("product_id")
+                and base.get("created_at") == quote.get("created_at")
+            ):
+                match = quote
+                break
+
+        if match:
+            fills.append((base, match))
+            used_quote_ids.add(match["id"])
+        else:
+            # Should not happen based on requirements, but handle gracefully
+            fills.append((base, {}))
+
+    # Add remaining quotes as partial fills if any (should not happen normally)
+    for quote in quote_txns:
+        if quote["id"] not in used_quote_ids:
+            fills.append(({}, quote))
+
+    return fills
+
+
+def _convert_atf_fill(
+    base: dict[str, Any], quote: dict[str, Any], config: dict[str, Any]
+) -> Optional[str]:
+    """Convert a single ATF fill (pair of transactions) to beancount"""
+    main_txn = base if base else quote
+    if not main_txn:
+        return None
+
+    atf = main_txn.get("advanced_trade_fill", {})
+    order_id = atf.get("order_id")
+    created_at = main_txn.get("created_at")
+    date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    date_str = date.strftime("%Y-%m-%d")
+
+    lines = [f'{date_str} * "Advanced Trade Fill" ^coinbase-{order_id}']
+    lines.append(f'  coinbase_trade_id: "{order_id}"')
+
+    txn_ids = [t.get("id") for t in (base, quote) if t.get("id")]
+    lines.append(f'  coinbase_id: "{" ".join(txn_ids)}"')
+    lines.append(f'  coinbase_timestamp: "{created_at}"')
+
+    prefix = config.get("account_prefix", "Assets:Coinbase")
+
+    # Base leg
+    if base:
+        amount = base.get("amount", {})
+        curr = amount.get("currency")
+        dec = Decimal(amount.get("amount", "0"))
+        fill_price = atf.get("fill_price")
+        lines.append(f"  {prefix}:{curr}  {dec:f} {curr} @ {Decimal(fill_price):f} USD")
+
+        # Commission
+        commission = atf.get("commission")
+        if commission:
+            fee_acc = get_account_for_transaction("advanced_trade_fill", "fee", config)
+            comm_dec = Decimal(commission)
+            lines.append(f"  {fee_acc}  {comm_dec:f} USD")
+            lines.append(f"  {prefix}:USD  -{comm_dec:f} USD")
+
+    # Quote leg
+    if quote:
+        amount = quote.get("amount", {})
+        curr = amount.get("currency")
+        dec = Decimal(amount.get("amount", "0"))
+        if curr == "USDC":
+            lines.append(f"  {prefix}:{curr}  {dec:f} {curr} @ 1.00 USD")
+        else:
+            lines.append(f"  {prefix}:{curr}  {dec:f} {curr}")
+
+    return "\n".join(lines)
+
+
 def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
     """
     Convert Coinbase transaction(s) to beancount format.
@@ -88,6 +187,16 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
     txns = [t for t in txns if t.get("status") == "completed"]
     if not txns:
         return None
+
+    # Handle advanced_trade_fill specifically by splitting into separate fills
+    if all(t.get("type") == "advanced_trade_fill" for t in txns):
+        fills = _group_atf_into_fills(txns)
+        results = []
+        for base, quote in fills:
+            entry = _convert_atf_fill(base, quote, config)
+            if entry:
+                results.append(entry)
+        return "\n\n".join(results) if results else None
 
     # Sort by created_at
     txns.sort(key=lambda t: t.get("created_at", ""))
@@ -132,8 +241,6 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
     prefix = config.get("account_prefix", "Assets:Coinbase")
     mappings = get_default_mappings()
 
-    is_atf = all(t.get("type") == "advanced_trade_fill" for t in txns)
-
     for t in txns:
         txn_type = t.get("type")
         amount = t.get("amount", {})
@@ -152,30 +259,6 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
 
         crypto_account = f"{prefix}:{crypto_currency}"
         crypto_dec = Decimal(crypto_amount)
-
-        if is_atf:
-            atf = t.get("advanced_trade_fill", {})
-            fill_price = atf.get("fill_price")
-            commission = atf.get("commission")
-
-            if crypto_currency in ("USD", "USDC"):
-                postings.append(
-                    f"  {crypto_account}  {crypto_dec:f} {crypto_currency} @ 1.00 USD"
-                )
-            else:
-                # Base currency leg
-                postings.append(
-                    f"  {crypto_account}  {crypto_dec:f} {crypto_currency} "
-                    f"@ {Decimal(fill_price):f} USD"
-                )
-                # Commission postings for the non-quote side
-                if commission:
-                    fee_account = get_account_for_transaction(txn_type, "fee", config)
-                    usd_asset_account = f"{prefix}:USD"
-                    comm_dec = Decimal(commission)
-                    postings.append(f"  {fee_account}  {comm_dec:f} USD")
-                    postings.append(f"  {usd_asset_account}  -{comm_dec:f} USD")
-            continue
 
         # Fee collection (deduplicated)
         fee_amt, fee_curr = _get_fee(t)
@@ -226,7 +309,7 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         fiat_balance += Decimal(f_amt)
 
     # Add balancing leg if needed
-    if not is_atf and abs(fiat_balance) > Decimal("0.00000001"):
+    if abs(fiat_balance) > Decimal("0.00000001"):
         txn_type = first_txn.get("type")
         # For merged transactions, the balancing leg is usually the fee
         category = "fee" if len(txns) > 1 else mappings.get(txn_type, "transfer")

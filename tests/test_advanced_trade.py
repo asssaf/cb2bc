@@ -10,7 +10,7 @@ def test_advanced_trade_fill_merging():
         },
     }
 
-    # Example from user
+    # Example from user: BTC-USDC
     txn_quote = {
         "advanced_trade_fill": {
             "commission": "49.0792",
@@ -50,16 +50,55 @@ def test_advanced_trade_fill_merging():
     assert f'coinbase_trade_id: "{order_id}"' in result
 
     # Check legs
-    assert "Assets:Coinbase:USDC  12269.800000 USDC @ 1.00 USD" in result or (
-        "Assets:Coinbase:USDC  12269.8 USDC @ 1.00 USD" in result
-    )
-    assert "Assets:Coinbase:BTC  -0.100000 BTC @ 122698.000000 USD" in result or (
-        "Assets:Coinbase:BTC  -0.1 BTC @ 122698 USD" in result
-    )
+    assert "Assets:Coinbase:USDC  12269.8 USDC @ 1.00 USD" in result
+    assert "Assets:Coinbase:BTC  -0.1 BTC @ 122698 USD" in result
 
     # Check commission
     assert "Expenses:Fees:Coinbase  49.0792 USD" in result
     assert "Assets:Coinbase:USD  -49.0792 USD" in result
+
+
+def test_advanced_trade_fill_usd():
+    config = {
+        "account_prefix": "Assets:Coinbase",
+        "default_accounts": {
+            "fees": "Expenses:Fees:Coinbase",
+        },
+    }
+
+    # Example with USD instead of USDC
+    txn_quote = {
+        "advanced_trade_fill": {
+            "commission": "1.0",
+            "fill_price": "50000",
+            "order_id": "order-usd",
+            "product_id": "BTC-USD",
+        },
+        "amount": {"amount": "100", "currency": "USD"},
+        "created_at": "2023-01-12T21:18:10Z",
+        "id": "q1",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+    txn_base = {
+        "advanced_trade_fill": {
+            "commission": "1.0",
+            "fill_price": "50000",
+            "order_id": "order-usd",
+            "product_id": "BTC-USD",
+        },
+        "amount": {"amount": "-0.002", "currency": "BTC"},
+        "created_at": "2023-01-12T21:18:10Z",
+        "id": "b1",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+
+    result = convert_transaction([txn_quote, txn_base], config)
+
+    # USD should NOT have @ 1.00 USD
+    assert "Assets:Coinbase:USD  100 USD" in result
+    assert "@ 1.00 USD" not in result
 
 
 def test_multiple_fills():
@@ -82,6 +121,7 @@ def test_multiple_fills():
             "commission": "1.0",
             "fill_price": "50000",
             "order_id": order_id,
+            "product_id": "BTC-USD",
         },
         "amount": {"amount": "100", "currency": "USD"},
         "id": "f1q",
@@ -94,12 +134,13 @@ def test_multiple_fills():
             "commission": "1.0",
             "fill_price": "50000",
             "order_id": order_id,
+            "product_id": "BTC-USD",
         },
-        "amount": {"amount": "0.002", "currency": "BTC"},
+        "amount": {"amount": "-0.002", "currency": "BTC"},
         "id": "f1b",
     }
 
-    # Fill 2
+    # Fill 2 (different price and commission)
     f2_q = {
         "type": "advanced_trade_fill",
         "status": "completed",
@@ -108,6 +149,7 @@ def test_multiple_fills():
             "commission": "2.0",
             "fill_price": "60000",
             "order_id": order_id,
+            "product_id": "BTC-USD",
         },
         "amount": {"amount": "120", "currency": "USD"},
         "id": "f2q",
@@ -120,18 +162,37 @@ def test_multiple_fills():
             "commission": "2.0",
             "fill_price": "60000",
             "order_id": order_id,
+            "product_id": "BTC-USD",
         },
-        "amount": {"amount": "0.002", "currency": "BTC"},
+        "amount": {"amount": "-0.002", "currency": "BTC"},
         "id": "f2b",
     }
 
     result = convert_transaction([f1_q, f1_b, f2_q, f2_b], config)
 
-    # Should have 2 fee postings and 2 balancing asset postings
-    assert "Expenses:Fees:Coinbase  1.0 USD" in result
-    assert "Assets:Coinbase:USD  -1.0 USD" in result
-    assert "Expenses:Fees:Coinbase  2.0 USD" in result
-    assert "Assets:Coinbase:USD  -2.0 USD" in result
+    # Should have 2 separate transaction blocks (separated by \n\n)
+    parts = result.split("\n\n")
+    assert len(parts) == 2
+
+    assert "f1b f1q" in parts[0]
+    assert "f2b f2q" in parts[1]
+
+    # Verify each block has its own commission postings
+    expected_fees = [
+        ("Expenses:Fees:Coinbase  1.0 USD", "Expenses:Fees:Coinbase  1 USD"),
+        ("Assets:Coinbase:USD  -1.0 USD", "Assets:Coinbase:USD  -1 USD"),
+        ("Expenses:Fees:Coinbase  2.0 USD", "Expenses:Fees:Coinbase  2 USD"),
+        ("Assets:Coinbase:USD  -2.0 USD", "Assets:Coinbase:USD  -2 USD"),
+    ]
+
+    fill_pairs = [
+        (expected_fees[0], expected_fees[1]),
+        (expected_fees[2], expected_fees[3]),
+    ]
+    for part, fees in zip(parts, fill_pairs):
+        f1, f2 = fees
+        assert f1[0] in part or f1[1] in part
+        assert f2[0] in part or f2[1] in part
 
 
 def test_declarations_include_usd():
@@ -149,6 +210,7 @@ def test_declarations_include_usd():
             "commission": "1.0",
             "fill_price": "50000",
             "order_id": "id",
+            "product_id": "BTC-USD",
         },
         "amount": {"amount": "0.002", "currency": "BTC"},
         "id": "id",
