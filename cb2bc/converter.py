@@ -180,6 +180,15 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
             sub_res_subtotal = resource.get("subtotal", {})
             if crypto_currency not in ("USD", "USDC"):
                 gross_fiat_amount = sub_res_subtotal.get("amount") or txn_fiat_amount
+        elif is_advanced_trade and crypto_currency != quote_currency:
+            # For advanced trade, the other side of the trade (quote currency)
+            # represents the gross fiat amount for the base currency leg.
+            for other_t in txns:
+                other_amount = other_t.get("amount", {})
+                if other_amount.get("currency") == quote_currency:
+                    gross_fiat_amount = abs(Decimal(other_amount.get("amount")))
+                    txn_fiat_currency = quote_currency
+                    break
         else:
             gross_fiat_amount = txn_fiat_amount
 
