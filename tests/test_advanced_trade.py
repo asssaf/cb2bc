@@ -104,3 +104,56 @@ def test_advanced_trade_fill_buy_merge():
     # USDC leg should be net of commission: -100.0 - 1.0 = -101.0
     assert "Assets:Coinbase:USDC  -101.0 USDC @ 1.00 USD" in result
     assert "Expenses:Fees:Coinbase  1.0 USD" in result
+
+
+def test_advanced_trade_fill_fil_usd_buy():
+    # FIL-USD buy scenario provided by user
+    config = {
+        "account_prefix": "Assets:Coinbase",
+        "default_accounts": {
+            "bank_checking": "Assets:Bank:Checking",
+            "fees": "Expenses:Fees:Coinbase",
+        },
+    }
+
+    txn_usd = {
+        "advanced_trade_fill": {
+            "commission": "6.290000872",
+            "fill_price": "2.819",
+            "order_id": "xxxx",
+            "order_side": "buy",
+            "product_id": "FIL-USD",
+        },
+        "amount": {"amount": "-1572.500218", "currency": "USD"},
+        "created_at": "2024-01-15T10:30:00Z",
+        "id": "txn-usd",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+
+    txn_fil = {
+        "advanced_trade_fill": {
+            "commission": "6.290000872",
+            "fill_price": "2.819",
+            "order_id": "xxxx",
+            "order_side": "buy",
+            "product_id": "FIL-USD",
+        },
+        "amount": {"amount": "557.822", "currency": "FIL"},
+        "created_at": "2024-01-15T10:30:00Z",
+        "id": "txn-fil",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+
+    result = convert_transaction([txn_usd, txn_fil], config)
+
+    assert "Assets:Coinbase:FIL  557.822 FIL @ 2.819 USD" in result
+    # USD leg: -1572.500218 - 6.290000872 = -1578.790218872
+    assert "Assets:Coinbase:USD  -1578.790218872 USD @ 1.00 USD" in result
+    assert "Expenses:Fees:Coinbase  6.290000872 USD" in result
+
+    # Verify balance: 557.822 * 2.819 - 1578.790218872 + 6.290000872
+    # 557.822 * 2.819 = 1572.500218
+    # 1572.500218 - 1578.790218872 + 6.290000872 = 0
+    assert "Assets:Bank:Checking" not in result

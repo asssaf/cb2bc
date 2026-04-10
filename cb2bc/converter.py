@@ -160,15 +160,23 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         if txn_fiat_currency:
             fiat_currency = txn_fiat_currency
 
-        # Fee collection (deduplicated)
+        # Fee collection
         fee_amt, fee_curr = _get_fee(t)
-        # For advanced_trade_fill, only take the fee from the non-quote currency side
-        # to avoid double counting (they report the same commission on both sides)
-        if is_advanced_trade and crypto_currency == quote_currency:
-            fee_amt, fee_curr = None, None
 
-        if fee_amt and fee_curr and (fee_amt, fee_curr) not in fees:
-            fees.append((fee_amt, fee_curr))
+        if is_advanced_trade:
+            # For advanced_trade_fill, commissions come in pairs.
+            # Only take the fee from the non-quote currency side of each pair
+            # to sum all unique commissions correctly.
+            if crypto_currency == quote_currency:
+                fee_amt, fee_curr = None, None
+            # Do NOT deduplicate fees for advanced trade fills because
+            # multiple fills might have the same commission amount.
+            if fee_amt and fee_curr:
+                fees.append((fee_amt, fee_curr))
+        else:
+            # For regular buys/sells, deduplicate by (amount, currency)
+            if fee_amt and fee_curr and (fee_amt, fee_curr) not in fees:
+                fees.append((fee_amt, fee_curr))
 
         crypto_account = f"{prefix}:{crypto_currency}"
         crypto_dec = Decimal(crypto_amount)
@@ -211,41 +219,20 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         else:
             # Adjust quote currency amount for advanced_trade_fill
             if is_advanced_trade and crypto_currency == quote_currency:
-                commission_total = Decimal("0")
-                for f_amt, f_curr in fees:
-                    if f_curr == crypto_currency:
-                        commission_total += Decimal(f_amt)
+                # Find the commission for THIS specific fill.
+                # It is reported in the matching advanced_trade_fill record for
+                # the same product_id/order_id that is NOT the quote currency.
+                # However, since they come in pairs with same ID, we can find it
+                # by looking at the commission field of this transaction.
+                commission_for_this_fill = Decimal("0")
+                if (adv := t.get("advanced_trade_fill")) and (
+                    comm := adv.get("commission")
+                ):
+                    commission_for_this_fill = Decimal(comm)
 
-                # If commission is in a different currency (e.g. USD vs USDC),
-                # we don't subtract it from the leg directly as it won't balance easily.
-                # However, user said commissions are always in USD and in the example
-                # he said USDC leg should be net of commission.
-                # If quote is USDC and commission is USD, they are often 1:1.
-                # Let's assume for now we subtract it if currencies match.
-                # Wait, the user example had commission in USD and quote in USDC.
-                # "USDC leg should be net of commission: 12269.8 - 49.0792 = 12220.7208"
-                # This implies 1 USD = 1 USDC.
-
-                # Let's find all commissions related to this order.
-                for other_t in txns:
-                    if (adv := other_t.get("advanced_trade_fill")) and (
-                        comm := adv.get("commission")
-                    ):
-                        # We only want to subtract it once per pair.
-                        # Since we are in the quote currency leg loop,
-                        # we can find the matching commission.
-                        curr = other_t.get("amount", {}).get("currency")
-                        if curr != quote_currency:
-                            commission_total = Decimal(comm)
-                            break
-
-                # Actually, if we ARE the quote currency:
-                # If we sell BTC, we GET USDC. USDC amount is positive.
-                # Net USDC = gross - commission.
-                # If we buy BTC, we PAY USDC. USDC amount is negative.
-                # Net USDC = gross - commission (more negative).
-                # Example: -100 USDC gross, 1 USDC commission -> -101 USDC net.
-                net_amount = crypto_dec - commission_total
+                # Net amount is gross amount minus commission.
+                # For buys (negative amount), this makes it more negative.
+                net_amount = crypto_dec - commission_for_this_fill
 
                 if crypto_currency in ("USD", "USDC"):
                     postings.append(
@@ -273,12 +260,18 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
                     # Other crypto legs without @@ use native_amount for balancing
                     fiat_balance += Decimal(txn_fiat_amount)
 
-    # Add fee postings
+    # Consolidate fees by currency
+    consolidated_fees = {}
     for f_amt, f_curr in fees:
+        current_total = consolidated_fees.get(f_curr, Decimal("0"))
+        consolidated_fees[f_curr] = current_total + Decimal(f_amt)
+
+    # Add fee postings
+    for f_curr, f_amt in sorted(consolidated_fees.items()):
         fee_account = get_account_for_transaction(first_txn.get("type"), "fee", config)
         postings.append(f"  {fee_account}  {f_amt} {f_curr}")
         # Fees are expenses (fiat inflow to the expense account, outflow from assets)
-        fiat_balance += Decimal(f_amt)
+        fiat_balance += f_amt
 
     # Add balancing leg if needed
     if abs(fiat_balance) > Decimal("0.00000001"):
