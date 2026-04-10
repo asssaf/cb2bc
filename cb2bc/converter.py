@@ -183,11 +183,12 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         elif is_advanced_trade and crypto_currency != quote_currency:
             # For advanced trade, the other side of the trade (quote currency)
             # represents the gross fiat amount for the base currency leg.
+            # Per user request, use USD for the total price @@.
             for other_t in txns:
                 other_amount = other_t.get("amount", {})
                 if other_amount.get("currency") == quote_currency:
                     gross_fiat_amount = abs(Decimal(other_amount.get("amount")))
-                    txn_fiat_currency = quote_currency
+                    txn_fiat_currency = "USD"
                     break
         else:
             gross_fiat_amount = txn_fiat_amount
@@ -242,7 +243,7 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
                 else:
                     net_amount = crypto_dec + commission_total
 
-                if crypto_currency == "USDC":
+                if crypto_currency in ("USD", "USDC"):
                     postings.append(
                         f"  {crypto_account}  {net_amount} {crypto_currency} @ 1.00 USD"
                     )
