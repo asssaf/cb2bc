@@ -47,15 +47,30 @@ def _get_fee(txn: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
                 if fee_val > 0:
                     return str(fee_val), total.get("currency")
 
+    # Advanced Trade Fill fees
+    if (advanced := txn.get("advanced_trade_fill")) and (
+        commission := advanced.get("commission")
+    ):
+        # Per user request, advanced trade fill commissions are always in USD
+        return commission, "USD"
+
     return None, None
 
 
 def get_shared_id(txn: dict[str, Any]) -> Optional[str]:
-    """Extract shared ID from buy, sell, or trade fields"""
+    """Extract shared ID from buy, sell, trade, or advanced_trade_fill fields"""
     for key in ("buy", "sell", "trade"):
         resource = txn.get(key)
         if isinstance(resource, dict) and (shared_id := resource.get("id")):
             return shared_id
+
+    if (
+        (advanced := txn.get("advanced_trade_fill"))
+        and isinstance(advanced, dict)
+        and (order_id := advanced.get("order_id"))
+    ):
+        return order_id
+
     return None
 
 
@@ -116,6 +131,19 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
     prefix = config.get("account_prefix", "Assets:Coinbase")
     mappings = get_default_mappings()
 
+    # For advanced_trade_fill, we need to find the base/quote currencies
+    # and adjust the quote currency leg by the commission.
+    is_advanced_trade = any(t.get("type") == "advanced_trade_fill" for t in txns)
+    quote_currency = None
+    if is_advanced_trade:
+        # Get product_id from any advanced_trade_fill transaction (e.g. BTC-USDC)
+        for t in txns:
+            if (advanced := t.get("advanced_trade_fill")) and (
+                product_id := advanced.get("product_id")
+            ):
+                _, quote_currency = product_id.split("-")
+                break
+
     for t in txns:
         txn_type = t.get("type")
         amount = t.get("amount", {})
@@ -134,6 +162,11 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
 
         # Fee collection (deduplicated)
         fee_amt, fee_curr = _get_fee(t)
+        # For advanced_trade_fill, only take the fee from the non-quote currency side
+        # to avoid double counting (they report the same commission on both sides)
+        if is_advanced_trade and crypto_currency == quote_currency:
+            fee_amt, fee_curr = None, None
+
         if fee_amt and fee_curr and (fee_amt, fee_curr) not in fees:
             fees.append((fee_amt, fee_curr))
 
@@ -147,6 +180,15 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
             sub_res_subtotal = resource.get("subtotal", {})
             if crypto_currency not in ("USD", "USDC"):
                 gross_fiat_amount = sub_res_subtotal.get("amount") or txn_fiat_amount
+        elif is_advanced_trade and crypto_currency != quote_currency:
+            # For advanced trade, the other side of the trade (quote currency)
+            # represents the gross fiat amount for the base currency leg.
+            for other_t in txns:
+                other_amount = other_t.get("amount", {})
+                if other_amount.get("currency") == quote_currency:
+                    gross_fiat_amount = abs(Decimal(other_amount.get("amount")))
+                    txn_fiat_currency = quote_currency
+                    break
         else:
             gross_fiat_amount = txn_fiat_amount
 
@@ -160,21 +202,64 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
             # negative if we lose
             fiat_balance += gross_fiat_dec if crypto_dec >= 0 else -gross_fiat_dec
         else:
-            if crypto_currency == "USDC":
+            # Adjust quote currency amount for advanced_trade_fill
+            if is_advanced_trade and crypto_currency == quote_currency:
+                commission_total = Decimal("0")
+                for f_amt, f_curr in fees:
+                    if f_curr == crypto_currency:
+                        commission_total += Decimal(f_amt)
+
+                # If commission is in a different currency (e.g. USD vs USDC),
+                # we don't subtract it from the leg directly as it won't balance easily.
+                # However, user said commissions are always in USD and in the example
+                # he said USDC leg should be net of commission.
+                # If quote is USDC and commission is USD, they are often 1:1.
+                # Let's assume for now we subtract it if currencies match.
+                # Wait, the user example had commission in USD and quote in USDC.
+                # "USDC leg should be net of commission: 12269.8 - 49.0792 = 12220.7208"
+                # This implies 1 USD = 1 USDC.
+
+                # Let's find all commissions related to this order.
+                for other_t in txns:
+                    if (adv := other_t.get("advanced_trade_fill")) and (
+                        comm := adv.get("commission")
+                    ):
+                        # We only want to subtract it once per pair.
+                        # Since we are in the quote currency leg loop,
+                        # we can find the matching commission.
+                        curr = other_t.get("amount", {}).get("currency")
+                        if curr != quote_currency:
+                            commission_total = Decimal(comm)
+                            break
+
+                # Actually, if we ARE the quote currency:
+                # If we sell BTC, we GET USDC. USDC amount is positive.
+                # Net USDC = gross - commission.
+                # If we buy BTC, we PAY USDC. USDC amount is negative.
+                # Net USDC = gross + commission (more negative).
+                if crypto_dec > 0:
+                    net_amount = crypto_dec - commission_total
+                else:
+                    net_amount = crypto_dec + commission_total
+
+                postings.append(f"  {crypto_account}  {net_amount} {crypto_currency}")
+                fiat_balance += net_amount
+            elif crypto_currency == "USDC":
                 postings.append(
                     f"  {crypto_account}  {crypto_amount} {crypto_currency} @ 1.00 USD"
                 )
+                fiat_balance += crypto_dec
             else:
                 postings.append(
                     f"  {crypto_account}  {crypto_amount} {crypto_currency}"
                 )
 
-            if crypto_currency in ("USD", "USDC"):
-                # Fiat posting directly affects balance
-                fiat_balance += crypto_dec
-            elif txn_fiat_amount:
-                # Other crypto legs without @@ use native_amount for balancing
-                fiat_balance += Decimal(txn_fiat_amount)
+                if crypto_currency == "USD":
+                    # Fiat posting directly affects balance
+                    fiat_balance += crypto_dec
+                elif txn_fiat_amount:
+                    # Other crypto legs without @@ use native_amount for balancing
+                    fiat_balance += Decimal(txn_fiat_amount)
 
     # Add fee postings
     for f_amt, f_curr in fees:
