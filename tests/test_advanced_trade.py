@@ -57,3 +57,50 @@ def test_advanced_trade_fill_merge():
     # and include the valuation
     assert "Assets:Coinbase:USDC  12220.7208 USDC @ 1.00 USD" in result
     assert "Expenses:Fees:Coinbase  49.0792 USD" in result
+
+
+def test_advanced_trade_fill_buy_merge():
+    config = {
+        "account_prefix": "Assets:Coinbase",
+        "default_accounts": {
+            "bank_checking": "Assets:Bank:Checking",
+            "fees": "Expenses:Fees:Coinbase",
+        },
+    }
+
+    txn_usdc = {
+        "advanced_trade_fill": {
+            "commission": "1.0",
+            "fill_price": "50000",
+            "order_id": "buy-order-id",
+            "order_side": "buy",
+            "product_id": "BTC-USDC",
+        },
+        "amount": {"amount": "-100.0", "currency": "USDC"},
+        "created_at": "2024-01-15T10:30:00Z",
+        "id": "txn-usdc",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+
+    txn_btc = {
+        "advanced_trade_fill": {
+            "commission": "1.0",
+            "fill_price": "50000",
+            "order_id": "buy-order-id",
+            "order_side": "buy",
+            "product_id": "BTC-USDC",
+        },
+        "amount": {"amount": "0.002", "currency": "BTC"},
+        "created_at": "2024-01-15T10:30:00Z",
+        "id": "txn-btc",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+
+    result = convert_transaction([txn_usdc, txn_btc], config)
+
+    assert "Assets:Coinbase:BTC  0.002 BTC @ 50000 USD" in result
+    # USDC leg should be net of commission: -100.0 - 1.0 = -101.0
+    assert "Assets:Coinbase:USDC  -101.0 USDC @ 1.00 USD" in result
+    assert "Expenses:Fees:Coinbase  1.0 USD" in result

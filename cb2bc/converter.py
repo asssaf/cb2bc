@@ -243,11 +243,9 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
                 # If we sell BTC, we GET USDC. USDC amount is positive.
                 # Net USDC = gross - commission.
                 # If we buy BTC, we PAY USDC. USDC amount is negative.
-                # Net USDC = gross + commission (more negative).
-                if crypto_dec > 0:
-                    net_amount = crypto_dec - commission_total
-                else:
-                    net_amount = crypto_dec + commission_total
+                # Net USDC = gross - commission (more negative).
+                # Example: -100 USDC gross, 1 USDC commission -> -101 USDC net.
+                net_amount = crypto_dec - commission_total
 
                 if crypto_currency in ("USD", "USDC"):
                     postings.append(
