@@ -176,24 +176,30 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         # Handle buy/sell specifics
         resource = t.get(txn_type) if txn_type in ("buy", "sell") else None
         gross_fiat_amount = None
+        fill_price = None
+
         if resource:
             sub_res_subtotal = resource.get("subtotal", {})
             if crypto_currency not in ("USD", "USDC"):
                 gross_fiat_amount = sub_res_subtotal.get("amount") or txn_fiat_amount
         elif is_advanced_trade and crypto_currency != quote_currency:
-            # For advanced trade, the other side of the trade (quote currency)
-            # represents the gross fiat amount for the base currency leg.
-            # Per user request, use USD for the total price @@.
-            for other_t in txns:
-                other_amount = other_t.get("amount", {})
-                if other_amount.get("currency") == quote_currency:
-                    gross_fiat_amount = abs(Decimal(other_amount.get("amount")))
-                    txn_fiat_currency = "USD"
-                    break
+            # For advanced trade, use fill_price with @ USD for base currency leg.
+            if advanced := t.get("advanced_trade_fill"):
+                fill_price = advanced.get("fill_price")
         else:
             gross_fiat_amount = txn_fiat_amount
 
-        if gross_fiat_amount and crypto_currency not in ("USD", "USDC"):
+        if fill_price and crypto_currency not in ("USD", "USDC"):
+            fill_price_dec = Decimal(fill_price)
+            postings.append(
+                f"  {crypto_account}  {crypto_amount} {crypto_currency} "
+                f"@ {fill_price_dec} USD"
+            )
+            # The value of this posting is positive if we gain crypto,
+            # negative if we lose
+            value = abs(crypto_dec) * fill_price_dec
+            fiat_balance += value if crypto_dec >= 0 else -value
+        elif gross_fiat_amount and crypto_currency not in ("USD", "USDC"):
             gross_fiat_dec = abs(Decimal(gross_fiat_amount))
             postings.append(
                 f"  {crypto_account}  {crypto_amount} {crypto_currency} "
