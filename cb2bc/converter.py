@@ -166,6 +166,11 @@ def _convert_atf_fill(
         amount = quote.get("amount", {})
         curr = amount.get("currency")
         dec = Decimal(amount.get("amount", "0"))
+
+        # Fix bug where quote amount is positive on 'buy' orders
+        if atf.get("order_side") == "buy" and dec > 0:
+            dec = -dec
+
         if curr == "USDC":
             lines.append(f"  {prefix}:{curr}  {dec:f} {curr} @ 1.00 USD")
         else:

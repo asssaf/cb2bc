@@ -219,3 +219,49 @@ def test_declarations_include_usd():
     declarations = generate_declarations([txn], config)
     assert "open Assets:Coinbase:USD" in declarations
     assert "open Expenses:Fees:Coinbase" in declarations
+
+
+def test_advanced_trade_buy_quote_negation():
+    config = {
+        "account_prefix": "Assets:Coinbase",
+        "default_accounts": {
+            "fees": "Expenses:Fees:Coinbase",
+        },
+    }
+
+    # Bug scenario: buy order with positive quote amount
+    txn_quote = {
+        "advanced_trade_fill": {
+            "commission": "1.0",
+            "fill_price": "50000",
+            "order_id": "buy-bug",
+            "order_side": "buy",
+            "product_id": "BTC-USD",
+        },
+        "amount": {"amount": "100", "currency": "USD"},
+        "created_at": "2023-01-12T21:18:10Z",
+        "id": "q1",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+    txn_base = {
+        "advanced_trade_fill": {
+            "commission": "1.0",
+            "fill_price": "50000",
+            "order_id": "buy-bug",
+            "order_side": "buy",
+            "product_id": "BTC-USD",
+        },
+        "amount": {"amount": "0.002", "currency": "BTC"},
+        "created_at": "2023-01-12T21:18:10Z",
+        "id": "b1",
+        "status": "completed",
+        "type": "advanced_trade_fill",
+    }
+
+    result = convert_transaction([txn_quote, txn_base], config)
+
+    # USD amount should be negated to -100
+    assert "Assets:Coinbase:USD  -100.000000 USD" in result or (
+        "Assets:Coinbase:USD  -100 USD" in result
+    )
