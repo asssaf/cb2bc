@@ -24,6 +24,14 @@ def collect_commodities(transactions: list) -> set[str]:
 
 def _get_fee(txn: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
     """Extract fee amount and currency from transaction data"""
+    # Try advanced_trade_fill
+    if (
+        (atf := txn.get("advanced_trade_fill"))
+        and isinstance(atf, dict)
+        and (commission := atf.get("commission"))
+    ):
+        return commission, "USD"
+
     # Try root 'fee' field
     if fee := txn.get("fee"):
         return fee.get("amount"), fee.get("currency")
@@ -51,11 +59,19 @@ def _get_fee(txn: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
 
 
 def get_shared_id(txn: dict[str, Any]) -> Optional[str]:
-    """Extract shared ID from buy, sell, or trade fields"""
+    """Extract shared ID from buy, sell, or trade fields or advanced_trade_fill"""
     for key in ("buy", "sell", "trade"):
         resource = txn.get(key)
         if isinstance(resource, dict) and (shared_id := resource.get("id")):
             return shared_id
+
+    if (
+        (atf := txn.get("advanced_trade_fill"))
+        and isinstance(atf, dict)
+        and (order_id := atf.get("order_id"))
+    ):
+        return order_id
+
     return None
 
 
@@ -116,6 +132,8 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
     prefix = config.get("account_prefix", "Assets:Coinbase")
     mappings = get_default_mappings()
 
+    is_atf = all(t.get("type") == "advanced_trade_fill" for t in txns)
+
     for t in txns:
         txn_type = t.get("type")
         amount = t.get("amount", {})
@@ -132,13 +150,37 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         if txn_fiat_currency:
             fiat_currency = txn_fiat_currency
 
+        crypto_account = f"{prefix}:{crypto_currency}"
+        crypto_dec = Decimal(crypto_amount)
+
+        if is_atf:
+            atf = t.get("advanced_trade_fill", {})
+            fill_price = atf.get("fill_price")
+            commission = atf.get("commission")
+
+            if crypto_currency in ("USD", "USDC"):
+                postings.append(
+                    f"  {crypto_account}  {crypto_dec:f} {crypto_currency} @ 1.00 USD"
+                )
+            else:
+                # Base currency leg
+                postings.append(
+                    f"  {crypto_account}  {crypto_dec:f} {crypto_currency} "
+                    f"@ {Decimal(fill_price):f} USD"
+                )
+                # Commission postings for the non-quote side
+                if commission:
+                    fee_account = get_account_for_transaction(txn_type, "fee", config)
+                    usd_asset_account = f"{prefix}:USD"
+                    comm_dec = Decimal(commission)
+                    postings.append(f"  {fee_account}  {comm_dec:f} USD")
+                    postings.append(f"  {usd_asset_account}  -{comm_dec:f} USD")
+            continue
+
         # Fee collection (deduplicated)
         fee_amt, fee_curr = _get_fee(t)
         if fee_amt and fee_curr and (fee_amt, fee_curr) not in fees:
             fees.append((fee_amt, fee_curr))
-
-        crypto_account = f"{prefix}:{crypto_currency}"
-        crypto_dec = Decimal(crypto_amount)
 
         # Handle buy/sell specifics
         resource = t.get(txn_type) if txn_type in ("buy", "sell") else None
@@ -184,7 +226,7 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         fiat_balance += Decimal(f_amt)
 
     # Add balancing leg if needed
-    if abs(fiat_balance) > Decimal("0.00000001"):
+    if not is_atf and abs(fiat_balance) > Decimal("0.00000001"):
         txn_type = first_txn.get("type")
         # For merged transactions, the balancing leg is usually the fee
         category = "fee" if len(txns) > 1 else mappings.get(txn_type, "transfer")
@@ -234,6 +276,7 @@ def collect_accounts(transactions: list, config: dict[str, Any]) -> set[str]:
             groups[txn["id"]] = [txn]
 
     for txn_group in groups.values():
+        is_atf = all(t.get("type") == "advanced_trade_fill" for t in txn_group)
         for txn in txn_group:
             if amount := txn.get("amount"):
                 currency = amount.get("currency")
@@ -246,6 +289,8 @@ def collect_accounts(transactions: list, config: dict[str, Any]) -> set[str]:
                 fee_account = get_account_for_transaction(txn_type, "fee", config)
                 if fee_account:
                     accounts.add(fee_account)
+                if is_atf:
+                    accounts.add(f"{prefix}:USD")
 
         # Other side accounts
         first_txn = txn_group[0]
