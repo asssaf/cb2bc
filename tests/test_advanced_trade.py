@@ -157,3 +157,25 @@ def test_advanced_trade_fill_fil_usd_buy():
     # 557.822 * 2.819 = 1572.500218
     # 1572.500218 - 1578.790218872 + 6.290000872 = 0
     assert "Assets:Bank:Checking" not in result
+
+
+def test_scientific_notation_avoidance():
+    # Test with small decimal that normally triggers scientific notation
+    config = {
+        "account_prefix": "Assets:Coinbase",
+        "default_accounts": {"transfers": "Equity:Transfers"},
+    }
+
+    txn = {
+        "id": "txn-small",
+        "type": "interest",
+        "status": "completed",
+        "amount": {"amount": "0.00000001", "currency": "ETH"},
+        "native_amount": {"amount": "0.00002", "currency": "USD"},
+        "created_at": "2024-01-15T10:30:00Z",
+    }
+
+    result = convert_transaction(txn, config)
+
+    # Decimal("0.00000001") str() is "1E-8" but :f is "0.00000001"
+    assert "Assets:Coinbase:ETH  0.00000001 ETH" in result

@@ -201,7 +201,7 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
             fill_price_dec = Decimal(fill_price)
             postings.append(
                 f"  {crypto_account}  {crypto_amount} {crypto_currency} "
-                f"@ {fill_price_dec} USD"
+                f"@ {fill_price_dec:f} USD"
             )
             # The value of this posting is positive if we gain crypto,
             # negative if we lose
@@ -211,7 +211,7 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
             gross_fiat_dec = abs(Decimal(gross_fiat_amount))
             postings.append(
                 f"  {crypto_account}  {crypto_amount} {crypto_currency} "
-                f"@@ {gross_fiat_dec} {txn_fiat_currency}"
+                f"@@ {gross_fiat_dec:f} {txn_fiat_currency}"
             )
             # The value of this posting is positive if we gain crypto,
             # negative if we lose
@@ -236,11 +236,12 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
 
                 if crypto_currency in ("USD", "USDC"):
                     postings.append(
-                        f"  {crypto_account}  {net_amount} {crypto_currency} @ 1.00 USD"
+                        f"  {crypto_account}  {net_amount:f} "
+                        f"{crypto_currency} @ 1.00 USD"
                     )
                 else:
                     postings.append(
-                        f"  {crypto_account}  {net_amount} {crypto_currency}"
+                        f"  {crypto_account}  {net_amount:f} {crypto_currency}"
                     )
                 fiat_balance += net_amount
             elif crypto_currency == "USDC":
@@ -269,7 +270,7 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
     # Add fee postings
     for f_curr, f_amt in sorted(consolidated_fees.items()):
         fee_account = get_account_for_transaction(first_txn.get("type"), "fee", config)
-        postings.append(f"  {fee_account}  {f_amt} {f_curr}")
+        postings.append(f"  {fee_account}  {f_amt:f} {f_curr}")
         # Fees are expenses (fiat inflow to the expense account, outflow from assets)
         fiat_balance += f_amt
 
@@ -288,10 +289,10 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
             balancing_amount = -fiat_balance
             if fiat_currency:
                 postings.append(
-                    f"  {other_account}  {balancing_amount} {fiat_currency}"
+                    f"  {other_account}  {balancing_amount:f} {fiat_currency}"
                 )
             else:
-                postings.append(f"  {other_account}  {balancing_amount}")
+                postings.append(f"  {other_account}  {balancing_amount:f}")
     elif len(postings) == 1 or (
         len(txns) == 1 and first_txn.get("type") in ("buy", "sell")
     ):
