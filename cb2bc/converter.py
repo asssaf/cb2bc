@@ -24,6 +24,14 @@ def collect_commodities(transactions: list) -> set[str]:
 
 def _get_fee(txn: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
     """Extract fee amount and currency from transaction data"""
+    # Try advanced_trade_fill
+    if (
+        (atf := txn.get("advanced_trade_fill"))
+        and isinstance(atf, dict)
+        and (commission := atf.get("commission"))
+    ):
+        return commission, "USD"
+
     # Try root 'fee' field
     if fee := txn.get("fee"):
         return fee.get("amount"), fee.get("currency")
@@ -51,12 +59,127 @@ def _get_fee(txn: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
 
 
 def get_shared_id(txn: dict[str, Any]) -> Optional[str]:
-    """Extract shared ID from buy, sell, or trade fields"""
+    """Extract shared ID from buy, sell, or trade fields or advanced_trade_fill"""
     for key in ("buy", "sell", "trade"):
         resource = txn.get(key)
         if isinstance(resource, dict) and (shared_id := resource.get("id")):
             return shared_id
+
+    if (
+        (atf := txn.get("advanced_trade_fill"))
+        and isinstance(atf, dict)
+        and (order_id := atf.get("order_id"))
+    ):
+        return order_id
+
     return None
+
+
+def _group_atf_into_fills(txns: list[dict[str, Any]]) -> list[tuple[dict, dict]]:
+    """Group advanced_trade_fill transactions into pairs (fills)"""
+    quote_txns = []
+    base_txns = []
+
+    for t in txns:
+        currency = t.get("amount", {}).get("currency")
+        if currency in ("USD", "USDC"):
+            quote_txns.append(t)
+        else:
+            base_txns.append(t)
+
+    fills = []
+    used_quote_ids = set()
+
+    for base in base_txns:
+        atf_b = base.get("advanced_trade_fill", {})
+        # Find a matching quote
+        match = None
+        for quote in quote_txns:
+            if quote["id"] in used_quote_ids:
+                continue
+            atf_q = quote.get("advanced_trade_fill", {})
+            if (
+                atf_b.get("commission") == atf_q.get("commission")
+                and atf_b.get("fill_price") == atf_q.get("fill_price")
+                and atf_b.get("product_id") == atf_q.get("product_id")
+                and base.get("created_at") == quote.get("created_at")
+            ):
+                match = quote
+                break
+
+        if match:
+            fills.append((base, match))
+            used_quote_ids.add(match["id"])
+        else:
+            # Should not happen based on requirements, but handle gracefully
+            fills.append((base, {}))
+
+    # Add remaining quotes as partial fills if any (should not happen normally)
+    for quote in quote_txns:
+        if quote["id"] not in used_quote_ids:
+            fills.append(({}, quote))
+
+    return fills
+
+
+def _convert_atf_fill(
+    base: dict[str, Any], quote: dict[str, Any], config: dict[str, Any]
+) -> Optional[str]:
+    """Convert a single ATF fill (pair of transactions) to beancount"""
+    main_txn = base if base else quote
+    if not main_txn:
+        return None
+
+    atf = main_txn.get("advanced_trade_fill", {})
+    order_id = atf.get("order_id")
+    created_at = main_txn.get("created_at")
+    date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    date_str = date.strftime("%Y-%m-%d")
+
+    lines = [f'{date_str} * "Advanced Trade Fill" ^coinbase-{order_id}']
+    lines.append(f'  coinbase_trade_id: "{order_id}"')
+
+    txn_ids = [t.get("id") for t in (base, quote) if t.get("id")]
+    lines.append(f'  coinbase_id: "{" ".join(txn_ids)}"')
+    lines.append(f'  coinbase_timestamp: "{created_at}"')
+
+    prefix = config.get("account_prefix", "Assets:Coinbase")
+
+    # Base leg
+    if base:
+        amount = base.get("amount", {})
+        curr = amount.get("currency")
+        dec = Decimal(amount.get("amount", "0"))
+
+        # Calculate total price from quote amount to avoid rounding errors
+        quote_amount = quote.get("amount", {}) if quote else {}
+        total_price = abs(Decimal(quote_amount.get("amount", "0")))
+        lines.append(f"  {prefix}:{curr}  {dec:f} {curr} @@ {total_price:f} USD")
+
+        # Commission
+        commission = atf.get("commission")
+        if commission:
+            fee_acc = get_account_for_transaction("advanced_trade_fill", "fee", config)
+            comm_dec = Decimal(commission)
+            lines.append(f"  {fee_acc}  {comm_dec:f} USD")
+            lines.append(f"  {prefix}:USD  -{comm_dec:f} USD")
+
+    # Quote leg
+    if quote:
+        amount = quote.get("amount", {})
+        curr = amount.get("currency")
+        dec = Decimal(amount.get("amount", "0"))
+
+        # Fix bug where quote amount is positive on 'buy' orders
+        if atf.get("order_side") == "buy" and dec > 0:
+            dec = -dec
+
+        if curr == "USDC":
+            lines.append(f"  {prefix}:{curr}  {dec:f} {curr} @ 1.00 USD")
+        else:
+            lines.append(f"  {prefix}:{curr}  {dec:f} {curr}")
+
+    return "\n".join(lines)
 
 
 def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
@@ -72,6 +195,16 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
     txns = [t for t in txns if t.get("status") == "completed"]
     if not txns:
         return None
+
+    # Handle advanced_trade_fill specifically by splitting into separate fills
+    if all(t.get("type") == "advanced_trade_fill" for t in txns):
+        fills = _group_atf_into_fills(txns)
+        results = []
+        for base, quote in fills:
+            entry = _convert_atf_fill(base, quote, config)
+            if entry:
+                results.append(entry)
+        return "\n\n".join(results) if results else None
 
     # Sort by created_at
     txns.sort(key=lambda t: t.get("created_at", ""))
@@ -132,13 +265,13 @@ def convert_transaction(txns: Any, config: dict[str, Any]) -> Optional[str]:
         if txn_fiat_currency:
             fiat_currency = txn_fiat_currency
 
+        crypto_account = f"{prefix}:{crypto_currency}"
+        crypto_dec = Decimal(crypto_amount)
+
         # Fee collection (deduplicated)
         fee_amt, fee_curr = _get_fee(t)
         if fee_amt and fee_curr and (fee_amt, fee_curr) not in fees:
             fees.append((fee_amt, fee_curr))
-
-        crypto_account = f"{prefix}:{crypto_currency}"
-        crypto_dec = Decimal(crypto_amount)
 
         # Handle buy/sell specifics
         resource = t.get(txn_type) if txn_type in ("buy", "sell") else None
@@ -234,6 +367,7 @@ def collect_accounts(transactions: list, config: dict[str, Any]) -> set[str]:
             groups[txn["id"]] = [txn]
 
     for txn_group in groups.values():
+        is_atf = all(t.get("type") == "advanced_trade_fill" for t in txn_group)
         for txn in txn_group:
             if amount := txn.get("amount"):
                 currency = amount.get("currency")
@@ -246,6 +380,8 @@ def collect_accounts(transactions: list, config: dict[str, Any]) -> set[str]:
                 fee_account = get_account_for_transaction(txn_type, "fee", config)
                 if fee_account:
                     accounts.add(fee_account)
+                if is_atf:
+                    accounts.add(f"{prefix}:USD")
 
         # Other side accounts
         first_txn = txn_group[0]
