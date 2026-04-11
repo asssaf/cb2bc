@@ -51,7 +51,8 @@ def test_advanced_trade_fill_merging():
 
     # Check legs
     assert "Assets:Coinbase:USDC  12269.8 USDC @ 1.00 USD" in result
-    assert "Assets:Coinbase:BTC  -0.1 BTC @ 122698 USD" in result
+    # Total price @@ 12269.8 USD instead of unit price @ 122698 USD
+    assert "Assets:Coinbase:BTC  -0.1 BTC @@ 12269.8 USD" in result
 
     # Check commission
     assert "Expenses:Fees:Coinbase  49.0792 USD" in result
@@ -99,6 +100,8 @@ def test_advanced_trade_fill_usd():
     # USD should NOT have @ 1.00 USD
     assert "Assets:Coinbase:USD  100 USD" in result
     assert "@ 1.00 USD" not in result
+    # Base should have @@ 100 USD
+    assert "Assets:Coinbase:BTC  -0.002 BTC @@ 100 USD" in result
 
 
 def test_multiple_fills():
@@ -262,6 +265,6 @@ def test_advanced_trade_buy_quote_negation():
     result = convert_transaction([txn_quote, txn_base], config)
 
     # USD amount should be negated to -100
-    assert "Assets:Coinbase:USD  -100.000000 USD" in result or (
-        "Assets:Coinbase:USD  -100 USD" in result
-    )
+    assert "Assets:Coinbase:USD  -100 USD" in result
+    # Base should have @@ 100 USD
+    assert "Assets:Coinbase:BTC  0.002 BTC @@ 100 USD" in result

@@ -150,8 +150,11 @@ def _convert_atf_fill(
         amount = base.get("amount", {})
         curr = amount.get("currency")
         dec = Decimal(amount.get("amount", "0"))
-        fill_price = atf.get("fill_price")
-        lines.append(f"  {prefix}:{curr}  {dec:f} {curr} @ {Decimal(fill_price):f} USD")
+
+        # Calculate total price from quote amount to avoid rounding errors
+        quote_amount = quote.get("amount", {}) if quote else {}
+        total_price = abs(Decimal(quote_amount.get("amount", "0")))
+        lines.append(f"  {prefix}:{curr}  {dec:f} {curr} @@ {total_price:f} USD")
 
         # Commission
         commission = atf.get("commission")
