@@ -28,6 +28,9 @@ dev = [
 [project.scripts]
 cb2bc = "cb2bc.cli:main"
 
+[tool.setuptools]
+packages = ["cb2bc"]
+
 [tool.ruff]
 line-length = 88
 target-version = "py39"
